@@ -14,7 +14,6 @@ Desktop.ini
 .claude/docs/UPGRADE-PLAN.md
 CLAUDE.local.md
 production/session-logs/
-production/session-state/*.md
 
 # === Internal Planning (not for public) ===
 docs/IMPROVEMENTS-PROPOSAL.md
