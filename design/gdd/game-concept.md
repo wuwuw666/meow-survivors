@@ -1,7 +1,8 @@
 # Game Concept: 喵族幸存者 (Meow Survivors)
 
 *Created: 2026-04-01*
-*Status: Draft*
+*Status: Under Review*
+*Last Review: 2026-04-01 — NEEDS REVISION (缺少 Detailed Rules, Formulas, Edge Cases)*
 
 ---
 
