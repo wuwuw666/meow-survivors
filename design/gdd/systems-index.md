@@ -2,7 +2,7 @@
 
 > **Status**: Draft
 > **Created**: 2026-04-01
-> **Last Updated**: 2026-04-01
+> **Last Updated**: 2026-04-02
 > **Source Concept**: design/gdd/game-concept.md
 
 ---
@@ -14,7 +14,7 @@
 设计支柱约束：
 - **可爱即正义**: 所有视觉反馈系统必须符合可爱美学
 - **成长的爽感**: 升级/数值系统必须让玩家感受到明显变强
-- **策略有深度**: Build和塔位决策必须有意义的权衡
+- **策略有深度**: Build 和塔位决策必须有意义的权衡
 
 ---
 
@@ -22,13 +22,13 @@
 
 | # | System Name | Category | Priority | Status | Design Doc | Depends On |
 |---|-------------|----------|----------|--------|------------|------------|
-| 1 | 输入系统 | Core | MVP | Designed | design/gdd/input-system.md | — |
+| 1 | 输入系统 | Core | MVP | Approved | design/gdd/input-system.md | — |
 | 2 | 碰撞检测系统 | Core | MVP | Approved | design/gdd/collision-detection-system.md | — |
 | 3 | 伤害计算系统 | Gameplay | MVP | Approved | design/gdd/damage-calculation-system.md | — |
-| 4 | 难度曲线系统 | Meta | MVP | Not Started | — | — |
-| 5 | 升级池系统 | Progression | MVP | Not Started | — | — |
+| 4 | 难度曲线系统 | Meta | MVP | Approved | design/gdd/difficulty-curve-system.md | — |
+| 5 | 升级池系统 | Progression | MVP | Approved | design/gdd/upgrade-pool-system.md | — |
 | 6 | 地图系统 | Meta | MVP | Not Started | — | — |
-| 7 | 移动系统 | Core | MVP | Not Started | — | 输入系统 |
+| 7 | 移动系统 | Core | MVP | Approved | design/gdd/movement-system.md | 输入系统, 地图系统 |
 | 8 | 生命值系统 | Core | MVP | Not Started | — | 碰撞检测系统 |
 | 9 | 目标选择系统 | Core | MVP | Not Started | — | 碰撞检测系统 |
 | 10 | 经验系统 | Progression | MVP | Not Started | — | 碰撞检测系统 |
@@ -51,7 +51,7 @@
 
 | Category | Description | Systems in this project |
 |----------|-------------|-------------------------|
-| **Core** | Foundation systems everything depends on | 输入系统、碰撞检测系统、移动系统、生命值系统、目标选择系统、存档系统 |
+| **Core** | Foundation systems everything depends on | 输入系统、碰撞检测系统、移动系统、生命值系统、目标选择系统 |
 | **Gameplay** | The systems that make the game fun | 伤害计算系统、自动攻击系统、敌人系统、防御塔系统、敌人生成系统、波次系统、塔位放置系统 |
 | **Progression** | How the player grows over time | 经验系统、升级池系统、升级选择系统、解锁系统 |
 | **Economy** | Resource creation and consumption | 金币系统 |
@@ -93,9 +93,9 @@
 ### Feature Layer (depends on core)
 
 1. **自动攻击系统** — depends on: 目标选择, 生命值, 伤害计算
-2. **敌人系统** — depends on: 生命值, 伤害计算, 移动系统(enemy move)
+2. **敌人系统** — depends on: 生命值, 伤害计算, 移动系统（enemy move）
 3. **防御塔系统** — depends on: 目标选择, 伤害计算, 生命值
-4. **敌人生成系统** — depends on: 敌人系统, 波次系统(触发)
+4. **敌人生成系统** — depends on: 敌人系统, 波次系统（触发）
 5. **波次系统** — depends on: 敌人生成, 难度曲线
 6. **升级选择系统** — depends on: 经验系统, 升级池系统
 7. **塔位放置系统** — depends on: 地图系统, 防御塔系统, 金币系统
@@ -149,7 +149,7 @@
 |--------|-----------|-----------------|------------|
 | 碰撞检测系统 | Technical | 6个系统依赖，性能敏感（大量敌人同屏） | 早期原型验证性能预算 |
 | 波次系统 | Design | 核心循环驱动者，难度曲线设计不确定 | 原型验证"波次节奏"是否有趣 |
-| 升级选择系统 | Design | Build多样性 vs 决策疲劳，平衡风险 | 原型测试玩家反馈 |
+| 升级选择系统 | Design | Build多样性 vs 决策疲劳，平衡困难 | 原型测试玩家反馈 |
 | 目标选择系统 | Technical | "最近敌人"算法在高密度敌人场景下的性能 | 与碰撞检测一起原型验证 |
 
 ---
@@ -159,17 +159,17 @@
 | Metric | Count |
 |--------|-------|
 | Total systems identified | 22 |
-| Design docs started | 3 |
-| Design docs reviewed | 2 |
-| Design docs approved | 2 |
-| MVP systems designed | 3/20 |
+| Design docs started | 7 |
+| Design docs reviewed | 7 |
+| Design docs approved | 7 |
+| MVP systems designed | 7/20 |
 | v1.0 systems designed | 0/2 |
 
 ---
 
 ## Next Steps
 
-- [ ] 运行 `/design-system 输入系统` 开始第一个系统GDD
+- [ ] 运行 `/design-system 地图系统` 开始下一个系统GDD
 - [ ] 对每个完成的GDD运行 `/design-review`
 - [ ] 原型验证高风险系统：碰撞检测、波次节奏
 - [ ] MVP系统设计完成后运行 `/gate-check pre-production`
