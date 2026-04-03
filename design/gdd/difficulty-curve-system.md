@@ -171,7 +171,7 @@ var upgrade_pause_sec: float
 | `base_speed_mult` | 第 1 波移速倍率 | `1.0` |
 | `speed_growth` | 每 2 波移速增长率 | `0.03` |
 | `milestone_bonus` | 里程碑波额外倍率 | `0.20` |
-| `boss_bonus` | 第 10 波额外倍率 | `0.35` |
+| `boss_bonus` | 第 10 波额外倍率 | `0.68` |
 | `base_spawn_interval` | 第 1 波基础刷怪间隔 | `1.20s` |
 | `spawn_interval_decay` | 每波刷怪间隔缩短值 | `0.07s` |
 | `min_spawn_interval` | 最低刷怪间隔 | `0.35s` |
@@ -306,7 +306,7 @@ endless_spawn_interval(d) = max(0.28, spawn_interval(10) - 0.03 * d)
 | 7 | 25 | 1.72 | 1.60 | 1.09 | 0.78s | 敌群组合复杂化 |
 | 8 | 27 | 1.84 | 1.70 | 1.09 | 0.71s | 中后期压迫 |
 | 9 | 29 | 1.96 | 1.80 | 1.12 | 0.64s | 终局前检定 |
-| 10 | 34 | 3.16 | 2.55 | 1.23 | 0.51s | 大里程碑 / Boss波 |
+| 10 | 34 | 3.50 | 3.19 | 1.23 | 0.51s | 大里程碑 / Boss波 |
 
 说明：
 - 里程碑波采用“少量额外数量 + 明显属性加成 + 更复杂敌种”。
@@ -375,7 +375,7 @@ func is_milestone_wave(wave_number: int) -> bool
 | `damage_growth` | float | 0.10 | 0.06-0.15 | 决定容错空间下降速度 |
 | `speed_growth` | float | 0.03 | 0.00-0.06 | 决定走位压力上升速度 |
 | `milestone_bonus` | float | 0.20 | 0.10-0.30 | 控制第 3/6 波阶段跃迁感 |
-| `boss_bonus` | float | 0.35 | 0.20-0.50 | 控制第 10 波高潮感 |
+| `boss_bonus` | float | 0.68 | 0.40-0.80 | 控制第 10 波高潮感 |
 | `base_spawn_interval` | float | 1.20 | 0.90-1.40 | 决定前期场面密度 |
 | `spawn_interval_decay` | float | 0.07 | 0.04-0.10 | 决定波次节奏压缩速度 |
 | `min_spawn_interval` | float | 0.35 | 0.28-0.50 | 决定系统允许的最大刷新密度 |

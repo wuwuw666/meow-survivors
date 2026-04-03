@@ -336,7 +336,7 @@ effective_damage = base_damage × WaveConfig.damage_multiplier
 | 7 | 1.72 | 1.09 | 1.60 | — |
 | 8 | 1.84 | 1.09 | 1.70 | — |
 | 9 | 1.96 | 1.12 | 1.80 | — |
-| 10 | 3.16 | 1.23 | 2.55 | 大里程碑 Boss（+35% bonus） |
+| 10 | 3.50 | 1.23 | 3.19 | 大里程碑 Boss（+68% bonus） |
 
 > 以上数值均引用自 difficulty-curve-system.md "8. 1-10 波示例表"。敌人系统不对这些值做任何独立定义。
 
@@ -361,7 +361,7 @@ effective_damage = 15 × 1.40 = 21
 - 难度曲线是唯一数值真理源（Single Source of Truth），所有属性乘数由其统一计算
 - 敌人系统只做应用（Application），不做定义（Definition）
 - 调参设计师只需修改 difficulty-curve-system 的调参旋钮，敌人属性自动适配
-- 里程碑波的额外倍率（+20% / +35%）由难度曲线的 `milestone_bonus` / `boss_bonus` 处理
+- 里程碑波的额外倍率（+20% / +68%）由难度曲线的 `milestone_bonus` / `boss_bonus` 处理
 
 ---
 

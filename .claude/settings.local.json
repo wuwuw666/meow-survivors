@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:vampire-survivors.fandom.com)",
+      "WebFetch(domain:brotato.wiki.spellbook.com)",
+      "Skill(gate-check)",
+      "Skill(design-system)",
+      "Skill(prototype)",
+      "Bash(\"F:/godot/Godot_v4.6-stable_win64.exe\" --headless --path \"F:/Project/gameB/meow-survivors/prototypes/core-loop\")",
+      "Bash(\"F:/godot/Godot_v4.6-stable_win64.exe\" --headless --editor --path \"F:/Project/gameB/meow-survivors/prototypes/core-loop\" --quit-after 100)"
+    ]
+  }
+}
