@@ -136,16 +136,71 @@ func get_nearest_enemy(center: Vector2, max_range: float) -> Node:
 |-----|------|------|
 | **Active** | 正常游戏进行中 | 所有碰撞检测启用 |
 | **Paused** | 游戏暂停 | 碰撞检测暂停，无信号输出 |
-| **UI_Only** | 升级面板打开 | 仅UI碰撞启用，游戏世界碰撞暂停 |
+| **UI_Only** | 升级面板/波次暂停窗口打开 | 仅UI碰撞启用，游戏世界碰撞暂停 |
+
+**暂停引用计数机制**：
+
+多个系统（波次系统、升级选择系统）都可以请求暂停游戏碰撞。为了避免控制权冲突，碰撞系统内部使用引用计数：
+
+```gdscript
+var _pause_ref_count: int = 0
+
+func pause_game_collision() -> void:
+    _pause_ref_count += 1
+    _update_collision_state()
+
+func resume_game_collision() -> void:
+    _pause_ref_count = max(0, _pause_ref_count - 1)
+    _update_collision_state()
+
+func _update_collision_state() -> void:
+    if _pause_ref_count > 0:
+        # 至少有一个系统请求暂停 → 切换到 UI_Only
+        get_tree().paused = true
+    else:
+        # 没有任何系统请求暂停 → 恢复 Active
+        get_tree().paused = false
+```
+
+**调用契约**：
+- 每次 `pause_game_collision()` 调用都必须有对应的 `resume_game_collision()` 调用
+- 波次系统和升级选择系统各自管理自己的暂停/恢复对，互不干扰
+- 如果有多个系统同时暂停碰撞，只有最后一个调用 resume 时才真正恢复
+
+**波次系统 → 碰撞（示例）**：
+```gdscript
+# 波次进入升级暂停
+collision_system.pause_game_collision()  # ref_count = 1
+...
+# 波次结束，恢复
+collision_system.resume_game_collision()  # ref_count = 0 → 恢复
+```
+
+**升级选择系统 → 碰撞（示例）**：
+```gdscript
+# 经验满级触发升级
+collision_system.pause_game_collision()  # ref_count = 1
+...
+# 玩家选择完升级
+collision_system.resume_game_collision()  # ref_count = 0 → 恢复
+```
+
+**嵌套场景（经验满级恰好在波次暂停期间）**：
+```
+波次暂停: pause() → ref=1
+升级暂停: pause() → ref=2
+升级恢复: resume() → ref=1 → 仍暂停
+波次恢复: resume() → ref=0 → 恢复
+```
 
 **状态转换**：
 
 | 触发事件 | 状态变化 |
 |---------|---------|
-| 游戏暂停 | Active → Paused |
-| 游戏恢复 | Paused → Active |
-| 升级面板打开 | Active → UI_Only |
-| 升级面板关闭 | UI_Only → Active |
+| `_pause_ref_count` 从 0 变为 1 | Active → UI_Only |
+| `Engine.time_scale = 0`（全局暂停） | Active → Paused |
+| `_pause_ref_count` 从 1 变为 0 | UI_Only → Active |
+| 全局暂停解除 | Paused → Active |
 
 ### Interactions with Other Systems
 

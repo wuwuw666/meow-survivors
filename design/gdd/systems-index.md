@@ -27,21 +27,21 @@
 | 3 | 伤害计算系统 | Gameplay | MVP | Approved | design/gdd/damage-calculation-system.md | — |
 | 4 | 难度曲线系统 | Meta | MVP | Approved | design/gdd/difficulty-curve-system.md | — |
 | 5 | 升级池系统 | Progression | MVP | Approved | design/gdd/upgrade-pool-system.md | — |
-| 6 | 地图系统 | Meta | MVP | Not Started | — | — |
+| 6 | 地图系统 | Meta | MVP | Approved | design/gdd/map-system.md | — |
 | 7 | 移动系统 | Core | MVP | Approved | design/gdd/movement-system.md | 输入系统, 地图系统 |
-| 8 | 生命值系统 | Core | MVP | Not Started | — | 碰撞检测系统 |
-| 9 | 目标选择系统 | Core | MVP | Not Started | — | 碰撞检测系统 |
-| 10 | 经验系统 | Progression | MVP | Not Started | — | 碰撞检测系统 |
-| 11 | 金币系统 | Economy | MVP | Not Started | — | 碰撞检测系统 |
-| 12 | 自动攻击系统 | Gameplay | MVP | Not Started | — | 目标选择, 生命值, 伤害计算 |
-| 13 | 敌人系统 | Gameplay | MVP | Not Started | — | 生命值, 伤害计算, 移动系统 |
-| 14 | 防御塔系统 | Gameplay | MVP | Not Started | — | 目标选择, 伤害计算, 生命值 |
-| 15 | 敌人生成系统 | Gameplay | MVP | Not Started | — | 敌人系统, 波次系统 |
-| 16 | 波次系统 | Gameplay | MVP | Not Started | — | 敌人生成, 难度曲线 |
-| 17 | 升级选择系统 | Progression | MVP | Not Started | — | 经验系统, 升级池系统 |
-| 18 | 塔位放置系统 | Gameplay | MVP | Not Started | — | 地图系统, 防御塔系统, 金币系统 |
-| 19 | UI系统 | UI | MVP | Not Started | — | 生命值, 经验, 金币, 波次 |
-| 20 | 结算系统 | UI | MVP | Not Started | — | 波次, 金币, 经验 |
+| 8 | 生命值系统 | Core | MVP | Approved | design/gdd/health-system.md | 碰撞检测系统 |
+| 9 | 目标选择系统 | Core | MVP | Approved | design/gdd/target-selection-system.md | 碰撞检测系统 |
+| 10 | 经验系统 | Progression | MVP | Designed | design/gdd/xp-system.md | 碰撞检测系统 |
+| 11 | 金币系统 | Economy | MVP | Designed | design/gdd/coin-system.md | 碰撞检测系统 |
+| 12 | 自动攻击系统 | Gameplay | MVP | Designed | design/gdd/auto-attack-system.md | 目标选择, 生命值, 伤害计算 |
+| 13 | 敌人系统 | Gameplay | MVP | Designed | design/gdd/enemy-system.md | 生命值, 伤害计算, 移动系统 |
+| 14 | 防御塔系统 | Gameplay | MVP | Designed | design/gdd/tower-system.md | 目标选择, 伤害计算, 生命值 |
+| 15 | 敌人生成系统 | Gameplay | MVP | Designed | design/gdd/enemy-spawn-system.md | 敌人系统, 波次系统 |
+| 16 | 波次系统 | Gameplay | MVP | Designed | design/gdd/wave-system.md | 敌人生成, 难度曲线 |
+| 17 | 升级选择系统 | Progression | MVP | Designed | design/gdd/upgrade-selection-system.md | 经验系统, 升级池系统 |
+| 18 | 塔位放置系统 | Gameplay | MVP | Designed | design/gdd/tower-placement-system.md | 地图系统, 防御塔系统, 金币系统 |
+| 19 | UI系统 | UI | MVP | Designed | design/gdd/ui-system.md | 生命值, 经验, 金币, 波次 |
+| 20 | 结算系统 | UI | MVP | Designed | design/gdd/settlement-system.md | 波次, 金币, 经验 |
 | 21 | 存档系统 | Persistence | v1.0 | Not Started | — | — |
 | 22 | 解锁系统 | Progression | v1.0 | Not Started | — | 存档系统, 金币系统 |
 
@@ -159,17 +159,19 @@
 | Metric | Count |
 |--------|-------|
 | Total systems identified | 22 |
-| Design docs started | 7 |
-| Design docs reviewed | 7 |
-| Design docs approved | 7 |
-| MVP systems designed | 7/20 |
+| Design docs completed | 20 |
+| Design docs reviewed | 10 |
+| Design docs approved | 10 |
+| MVP systems designed | 20/20 |
 | v1.0 systems designed | 0/2 |
 
 ---
 
 ## Next Steps
 
-- [ ] 运行 `/design-system 地图系统` 开始下一个系统GDD
-- [ ] 对每个完成的GDD运行 `/design-review`
+- [x] MVP 全部 20 个系统 GDD 设计完成
+- [x] 批量设计审查完成（11 个文档，均 NEEDS REVISION）
+- [ ] 修复 P0 级问题：波次缩放不一致、碰撞控制权冲突、buff 公式错误、Boss 保证生成、星级公式校准
+- [ ] 修复完成后开始 Godot 原型实现
 - [ ] 原型验证高风险系统：碰撞检测、波次节奏
-- [ ] MVP系统设计完成后运行 `/gate-check pre-production`
+- [ ] 实现完成后运行 `/gate-check pre-production`
