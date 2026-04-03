@@ -1,0 +1,32 @@
+[gd_scene load_steps=3 format=3 uid="uid://main_game"]
+
+[ext_resource type="Script" path="res://src/game/main_game.gd" id="main"]
+
+[sub_resource type="CapsuleShape2D" id="cap_hero"]
+radius = 16.0
+height = 32.0
+
+[node name="MainGame" type="Node2D"]
+script = ExtResource("main")
+
+[node name="Background" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.15, 0.15, 0.2, 1)
+
+[node name="Player" type="CharacterBody2D" parent="."]
+position = Vector2(640, 360)
+groups = ["player"]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Player"]
+shape = SubResource("cap_hero")
+
+[node name="EnemyContainer" type="Node2D" parent="."]
+
+[node name="UILayer" type="CanvasLayer" parent="."]
+layer = 10
+
+[node name="DamageNumbers" type="Node2D" parent="UILayer"]

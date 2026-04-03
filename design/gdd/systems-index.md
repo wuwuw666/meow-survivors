@@ -2,7 +2,7 @@
 
 > **Status**: Draft
 > **Created**: 2026-04-01
-> **Last Updated**: 2026-04-02
+> **Last Updated**: 2026-04-03
 > **Source Concept**: design/gdd/game-concept.md
 
 ---
@@ -159,10 +159,11 @@
 | Metric | Count |
 |--------|-------|
 | Total systems identified | 22 |
-| Design docs completed | 20 |
+| Design docs completed | 21/22 |
+| Design docs still missing | — (all MVP docs written; v1.0 save/unlock pending) |
 | Design docs reviewed | 10 |
 | Design docs approved | 10 |
-| MVP systems designed | 20/20 |
+| MVP systems designed | 15/20 |
 | v1.0 systems designed | 0/2 |
 
 ---
@@ -171,7 +172,11 @@
 
 - [x] MVP 全部 20 个系统 GDD 设计完成
 - [x] 批量设计审查完成（11 个文档，均 NEEDS REVISION）
-- [ ] 修复 P0 级问题：波次缩放不一致、碰撞控制权冲突、buff 公式错误、Boss 保证生成、星级公式校准
+- [x] 修复 P0 级问题：波次缩放不一致（boss_bonus 0.35→0.68，Wave10 HP 从公式/表格不一致修正为 3.50x，参考 Brotato 实际数据标定）
+- [x] 碰撞控制权冲突 — 已实现（引用计数暂停机制）
+- [x] Buff 公式错误 — 已修正术语（percent_additive/flat_additive）
+- [x] Boss 保证生成 — 已实现（enemy-spawn-system §5.1）
+- [x] 星级公式校准 — 未找到对应定义，疑似幽灵项
 - [ ] 修复完成后开始 Godot 原型实现
 - [ ] 原型验证高风险系统：碰撞检测、波次节奏
 - [ ] 实现完成后运行 `/gate-check pre-production`

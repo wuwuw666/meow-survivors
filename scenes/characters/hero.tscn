@@ -1,0 +1,29 @@
+[gd_scene load_steps=4 format=3 uid="uid://hero_scene"]
+
+[ext_resource type="Script" path="res://src/core/movement_system.gd" id="move_sys"]
+[ext_resource type="Script" path="res://src/core/target_system.gd" id="target_sys"]
+[ext_resource type="Script" path="res://src/gameplay/auto_attack.gd" id="auto_atk"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_hero"]
+radius = 16.0
+
+[node name="Hero" type="CharacterBody2D"]
+groups = ["player"]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_hero")
+
+[node name="HealthComponent" type="Node" parent="."]
+
+[node name="MovementSystem" type="Node" parent="."]
+script = ExtResource("move_sys")
+base_speed = 200.0
+
+[node name="TargetSystem" type="Node" parent="."]
+script = ExtResource("target_sys")
+
+[node name="AutoAttack" type="Node" parent="."]
+script = ExtResource("auto_atk")
+base_damage = 5
+attack_range = 150.0
+base_cooldown = 0.8

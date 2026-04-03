@@ -1,0 +1,19 @@
+[gd_scene load_steps=4 format=3 uid="uid://main_scene_prototype"]
+
+[ext_resource type="Script" path="res://prototypes/core-loop/scripts/game_state.gd" id="state"]
+[ext_resource type="Script" path="res://prototypes/core-loop/scripts/player.gd" id="player"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_tower"]
+radius = 500.0
+
+[node name="MainScene" type="Node2D"]
+script = ExtResource("state")
+
+[node name="Player" type="CharacterBody2D" parent="."]
+script = ExtResource("player")
+
+[node name="EnemyContainer" type="Node2D" parent="."]
+
+[node name="DamageNumbers" type="Node2D" parent="."]
+
+[node name="UILayer" type="CanvasLayer" parent="."]
