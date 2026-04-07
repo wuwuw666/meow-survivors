@@ -1,6 +1,6 @@
 ## 自动攻击系统 (Auto Attack System)
 ## GDD: design/gdd/auto-attack-system.md
-## 猫咪英雄默认攻击行为控制器, 冷却计时 -> 目标查询 -> 发射弹丸 -> 命中判定 -> 伤害
+## 猫咪英雄默认攻击行为: 冷却计时 -> 目标查询 -> 发射弹丸 -> 弹丸飞行命中 -> 伤害
 
 class_name AutoAttackSystem
 extends Node
@@ -15,14 +15,12 @@ extends Node
 @export var base_cooldown: float = 0.8
 
 ## 弹丸飞行速度（像素/秒）
-@export var projectile_speed: float = 400.0
+@export var projectile_speed: float = 500.0
 
 ## 弹丸场景
 @export var projectile_scene: PackedScene
 
 # ---------- 运行时 ----------
-enum State { Idle, Cooldown, TargetQuery, Firing }
-var state: State = State.Idle
 var attack_timer: float = 0.0
 var attack_cooldown_sec: float = 0.8
 var damage_multiplier: float = 1.0
@@ -34,24 +32,21 @@ signal projectile_fired(projectile: Node)
 signal projectile_hit_enemy(enemy: Node, damage: int, is_crit: bool)
 
 # ---------- 系统引用 ----------
-var _target_system: Node = null
+var _target_system: TargetSystem = null
 
 func _ready() -> void:
-	_target_system = get_node_or_null("../TargetSystem")
+	_target_system = get_parent().get_node_or_null("TargetSystem") as TargetSystem
 	attack_cooldown_sec = base_cooldown
+	# 初始冷却，让玩家入场后才开始攻击
+	attack_timer = 0.5
 
 func _process(delta: float) -> void:
 	if Game.is_paused or Game.is_game_over:
 		return
-	match state:
-		State.Cooldown:
-			attack_timer += delta
-			if attack_timer >= attack_cooldown_sec:
-				attack_timer = 0.0
-				_try_attack()
-
-func _physics_process(delta: float) -> void:
-	pass
+	attack_timer += delta
+	if attack_timer >= attack_cooldown_sec:
+		attack_timer = 0.0
+		_try_attack()
 
 func _try_attack() -> void:
 	if _target_system == null:
@@ -59,7 +54,6 @@ func _try_attack() -> void:
 
 	var parent := get_parent() as Node2D
 	if parent == null:
-		state = State.Idle
 		return
 
 	var target := _target_system.get_target(
@@ -68,35 +62,82 @@ func _try_attack() -> void:
 		TargetSystem.TargetStrategy.NEAREST
 	)
 	if target == null:
-		state = State.Idle
 		return
 
-	_fire_at(target)
+	_fire_projectile(parent.global_position, target)
 
-func _fire_at(target: Node) -> void:
-	var parent := get_parent() as Node2D
-	if parent == null:
-		return
-
-	# 直接伤害计算（简化 MVP：弹丸瞬时命中）
-	var dmg := _calculate_damage(target)
-	var hc := target.get_node_or_null("HealthComponent") as HealthComponent
-	if hc and hc.current_hp > 0:
-		hc.take_damage(dmg)
-
-	var is_crit := randf() < crit_chance
+## 发射弹丸
+func _fire_projectile(from_pos: Vector2, target: Node) -> void:
+	var is_crit: bool = randf() < crit_chance
+	var dmg: int = _calculate_damage(target)
 	if is_crit:
-		dmg = floor(dmg * crit_multiplier)
+		dmg = int(floor(float(dmg) * crit_multiplier))
 
-	projectile_hit_enemy.emit(target, dmg, is_crit)
-	state = State.Cooldown
+	# 创建弹丸
+	var proj: Area2D
+	if projectile_scene != null:
+		proj = projectile_scene.instantiate() as Area2D
+	else:
+		proj = _make_default_projectile()
 
-func _calculate_damage(target: Node) -> int:
-	var base := floor(float(base_damage) * damage_multiplier)
+	proj.global_position = from_pos
+	# 显式且强力地注入弹丸数据
+	if proj.has_method("setup"):
+		proj.setup(target, dmg, is_crit, projectile_speed)
+	else:
+		proj.set("damage", dmg)
+		proj.set("is_crit", is_crit)
+		proj.set("speed", projectile_speed)
+		if proj.has_method("_aim_at_target"):
+			proj.call("_aim_at_target")
+
+	# 添加到场景树（添加到主场景的弹丸容器）
+	var main := get_tree().get_first_node_in_group("main_game")
+	if main:
+		main.add_child(proj)
+		# 连接弹丸命中信号 -> 主游戏显示伤害数字
+		if proj.has_signal("hit_enemy"):
+			proj.hit_enemy.connect(main._on_projectile_hit)
+	else:
+		get_parent().get_parent().add_child(proj)
+
+	projectile_fired.emit(proj)
+
+func _make_default_projectile() -> Area2D:
+	## 内建 fallback 弹丸（没有预设场景时使用）
+	var proj := Area2D.new()
+	proj.name = "Projectile"
+
+	# 视觉：黄色小圆点
+	var sprite := ColorRect.new()
+	sprite.name = "Sprite"
+	sprite.offset_left = -4.0
+	sprite.offset_top = -4.0
+	sprite.offset_right = 4.0
+	sprite.offset_bottom = 4.0
+	sprite.color = Color(1, 0.85, 0.2, 1)  # 金黄色
+	proj.add_child(sprite)
+
+	# 碰撞体
+	var shape := CollisionShape2D.new()
+	var circle := CircleShape2D.new()
+	circle.radius = 6.0
+	shape.shape = circle
+	proj.add_child(shape)
+
+	# 脚本逻辑用内联方式绑定
+	var script_node := Node.new()
+	script_node.name = "ProjLogic"
+	proj.add_child(script_node)
+
+	return proj
+
+func _calculate_damage(_target: Node) -> int:
+	var base: int = int(floor(float(base_damage) * damage_multiplier))
 	# 应用光环塔加成
 	for tw in Game.placed_towers:
 		if tw.has("type") and tw.type == "aura":
-			base = ceil(base * 1.15)
+			base = int(ceil(float(base) * 1.15))
 	return max(1, base)
 
 # ---------- 公开 API: 升级系统调用 ----------

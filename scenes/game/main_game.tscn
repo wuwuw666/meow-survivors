@@ -1,32 +1,53 @@
-[gd_scene load_steps=3 format=3 uid="uid://main_game"]
+[gd_scene format=3 uid="uid://bljkaq4mnij5r"]
 
-[ext_resource type="Script" path="res://src/game/main_game.gd" id="main"]
+[ext_resource type="Script" uid="uid://dnhvtyqe0g6e8" path="res://src/game/main_game.gd" id="main"]
 
 [sub_resource type="CapsuleShape2D" id="cap_hero"]
 radius = 16.0
 height = 32.0
 
-[node name="MainGame" type="Node2D"]
+[sub_resource type="Curve2D" id="Curve2D_right"]
+_data = {
+"points": PackedVector2Array(0, 0, 0, 0, 1209, 681, 0, 0, 0, 0, 1098, 535, 0, 0, 0, 0, 1160, 355, 0, 0, 0, 0, 1175, 221, 0, 0, 0, 0, 1038, 148, 0, 0, 0, 0, 877, 93, 0, 0, 0, 0, 476.5561, 76.8033, 0, 0, 0, 0, 277.22275, 298.80328, 0, 0, 0, 0, 180, 433, 0, 0, 0, 0, 465, 607, 0, 0, 0, 0, 763, 551, 0, 0, 0, 0, 754, 337)
+}
+point_count = 12
+
+[node name="MainGame" type="Node2D" unique_id=1911321003]
 script = ExtResource("main")
 
-[node name="Background" type="ColorRect" parent="."]
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-color = Color(0.15, 0.15, 0.2, 1)
+[node name="Background" type="ColorRect" parent="." unique_id=1360512064]
+offset_right = 1280.0
+offset_bottom = 720.0
+color = Color(0.12, 0.12, 0.18, 1)
 
-[node name="Player" type="CharacterBody2D" parent="."]
+[node name="Camera2D" type="Camera2D" parent="." unique_id=1551089029]
 position = Vector2(640, 360)
-groups = ["player"]
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="Player"]
+[node name="Player" type="CharacterBody2D" parent="." unique_id=742741110]
+position = Vector2(640, 360)
+
+[node name="Sprite" type="ColorRect" parent="Player" unique_id=1359871741]
+offset_left = -12.0
+offset_top = -14.0
+offset_right = 12.0
+offset_bottom = 14.0
+color = Color(0.25, 0.5, 1, 1)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Player" unique_id=383744032]
 shape = SubResource("cap_hero")
 
-[node name="EnemyContainer" type="Node2D" parent="."]
+[node name="EnemyContainer" type="Node2D" parent="." unique_id=1624064382]
 
-[node name="UILayer" type="CanvasLayer" parent="."]
+[node name="PickupContainer" type="Node2D" parent="." unique_id=1070596915]
+
+[node name="EffectContainer" type="Node2D" parent="." unique_id=753423725]
+
+[node name="Paths" type="Node2D" parent="." unique_id=1953309380]
+
+[node name="PathRight" type="Path2D" parent="Paths" unique_id=1358560842]
+curve = SubResource("Curve2D_right")
+
+[node name="UILayer" type="CanvasLayer" parent="." unique_id=1654935724]
 layer = 10
 
-[node name="DamageNumbers" type="Node2D" parent="UILayer"]
+[node name="DamageNumbers" type="Node2D" parent="UILayer" unique_id=1808527078]

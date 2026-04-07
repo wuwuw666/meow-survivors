@@ -11,17 +11,19 @@ config_version=5
 [application]
 
 config/name="喵族幸存者"
+run/main_scene="res://scenes/game/main_game.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 config/icon="res://icon.svg"
-run/main_scene="res://scenes/game/main_game.tscn"
 
 [autoload]
 
 Game="*res://src/data/enemy_data.gd"
 
-[physics]
+[display]
 
-3d/physics_engine="Jolt Physics"
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
 
 [input]
 
@@ -50,7 +52,10 @@ move_right={
 ]
 }
 
+[physics]
+
+3d/physics_engine="Jolt Physics"
+
 [rendering]
 
-renderer/rendering_method="forward_plus"
 rendering_device/driver.windows="d3d12"

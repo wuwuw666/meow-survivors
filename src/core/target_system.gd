@@ -16,9 +16,9 @@ var _enemies_in_range: Array[Node] = []
 
 ## 查询最优目标
 ## origin: 攻击发者位置
-## range: 射程（像素）
+## query_range: 射程（像素）
 ## strategy: 策略（MVP 仅 NEAREST 有效）
-func get_target(origin: Vector2, range: float, strategy: TargetStrategy = TargetStrategy.NEAREST) -> Node:
+func get_target(origin: Vector2, query_range: float, strategy: TargetStrategy = TargetStrategy.NEAREST) -> Node:
 	_enemies_in_range.clear()
 
 	var tree := get_tree()
@@ -26,7 +26,7 @@ func get_target(origin: Vector2, range: float, strategy: TargetStrategy = Target
 		return null
 
 	var group := tree.get_nodes_in_group("enemy")
-	var range_sq := range * range
+	var range_sq := query_range * query_range
 
 	for enemy: Node in group:
 		if enemy.get("is_dead") == true or not is_instance_valid(enemy):
@@ -64,7 +64,7 @@ func _nearest(origin: Vector2) -> Node:
 
 func _lowest_hp() -> Node:
 	var best: Node = null
-	var best_hp: int = INF
+	var best_hp: int = 9999999  # 使用较大的整数替代 INF
 	for e: Node in _enemies_in_range:
 		var hc := e.get_node_or_null("HealthComponent")
 		if hc == null:

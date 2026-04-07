@@ -22,7 +22,7 @@ func bind_to(body: CharacterBody2D) -> void:
 	movement_ready.emit()
 
 ## 每帧调用，应用移动
-func apply_movement(direction: Vector2, delta: float) -> void:
+func apply_movement(direction: Vector2, _delta: float) -> void:
 	if _body == null:
 		return
 	if direction == Vector2.ZERO:

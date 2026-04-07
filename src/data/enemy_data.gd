@@ -56,12 +56,11 @@ func set_player_max_hp(new_max: int) -> void:
 
 ## ---- Reset ----
 func reset_session() -> void:
-	player_hp = 100
-	player_max_hp = 100
-	player_xp = 0
+	player_hp = 20
+	player_max_hp = 20
 	player_xp_needed = 10
 	player_level = 1
-	player_coins = 0
+	player_coins = 100
 	player_damage = 5
 	player_attack_cooldown = 0.8
 	player_range = 150.0
