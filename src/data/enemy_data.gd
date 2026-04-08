@@ -26,12 +26,15 @@ var is_game_over: bool = false
 var placed_towers: Array = []
 
 ## ---- XP & level ----
-func add_xp(amount: int) -> void:
+func add_xp(amount: int) -> int:
+	var levels_gained := 0
 	player_xp += amount
 	while player_xp >= player_xp_needed:
 		player_xp -= player_xp_needed
 		player_level += 1
+		levels_gained += 1
 		player_xp_needed = _calc_xp_needed(player_level)
+	return levels_gained
 
 func _calc_xp_needed(level: int) -> int:
 	return ceil(10.0 * (1.0 + (level - 1) * 0.3))
@@ -58,6 +61,7 @@ func set_player_max_hp(new_max: int) -> void:
 func reset_session() -> void:
 	player_hp = 20
 	player_max_hp = 20
+	player_xp = 0
 	player_xp_needed = 10
 	player_level = 1
 	player_coins = 100

@@ -60,6 +60,7 @@ var _shake_decay: float = 8.0
 
 # 玩家受击闪白
 var _hit_flash_timer: float = 0.0
+var _pending_level_ups: int = 0
 
 const ENEMY_SCENE_PATH: String = "res://scenes/characters/enemy_base.tscn"
 
@@ -67,6 +68,7 @@ const ENEMY_SCENE_PATH: String = "res://scenes/characters/enemy_base.tscn"
 func _ready() -> void:
 	# 注册组，供弹丸系统查找父节点
 	add_to_group("main_game")
+	player.add_to_group("player")
 	if ui == null:
 		var uilayer = get_node_or_null("UILayer")
 		if uilayer:
@@ -364,12 +366,8 @@ func _process_pickups(delta: float) -> void:
 			match ptype:
 				"xp":
 					var val: int = pickup.get_meta("xp_value", 3)
-					Game.add_xp(val)
+					_grant_xp(val)
 					_show_floating_text(pickup.global_position, "+%d XP" % val, Color(0.7, 0.5, 1.0))
-					var new_needed := _calc_xp_needed(Game.player_level)
-					if Game.player_xp_needed != new_needed:
-						Game.player_xp_needed = new_needed
-						_show_upgrade_panel()
 				"coin":
 					var val: int = pickup.get_meta("coin_value", 2)
 					Game.add_coins(val)
@@ -382,7 +380,7 @@ func _process_pickups(delta: float) -> void:
 
 func spawn_xp_orb(pos: Vector2, value: int) -> void:
 	if pickup_container == null:
-		Game.add_xp(value)
+		_grant_xp(value)
 		return
 	var orb = Area2D.new()
 	orb.name = "XPOrb"
@@ -481,12 +479,12 @@ func _on_enemy_died_wrapper(enemy: Node) -> void:
 	var xp_val := int(enemy_data.get("xp", 3))
 
 	# 塔防模式：直接入账，不散落物理拾取物，不用跑过去吃
-	Game.add_coins(10)
-	Game.add_xp(xp_val)
+	Game.add_coins(coin_val)
+	_grant_xp(xp_val)
 	_update_hud()
 	
 	# 原地视觉提示取代掉落
-	_show_floating_text(enemy.global_position, "+10 💰", Color(1, 0.85, 0.2))
+	_show_floating_text(enemy.global_position, "+%d 💰" % coin_val, Color(1, 0.85, 0.2))
 	_show_floating_text(enemy.global_position + Vector2(0, -15), "+%d XP" % xp_val, Color(0.7, 0.5, 1.0))
 
 	# 死亡爆炸粒子
@@ -497,6 +495,19 @@ func _on_enemy_died_wrapper(enemy: Node) -> void:
 
 func _calc_xp_needed(level: int) -> int:
 	return ceil(10.0 * pow(level, 0.9))
+
+func _grant_xp(amount: int) -> void:
+	var levels_gained := Game.add_xp(amount)
+	if levels_gained > 0:
+		_pending_level_ups += levels_gained
+		if not Game.is_game_over and (upgrade_panel == null or not upgrade_panel.visible):
+			_open_next_upgrade_panel()
+
+func _open_next_upgrade_panel() -> void:
+	if _pending_level_ups <= 0 or Game.is_game_over:
+		return
+	_pending_level_ups -= 1
+	_show_upgrade_panel()
 
 # ========== UI ==========
 func _build_ui() -> void:
@@ -799,7 +810,11 @@ func _select_upgrade(type_name: String) -> void:
 	var tw := create_tween()
 	tw.tween_property(upgrade_panel, "modulate:a", 0.0, 0.1)
 	tw.tween_callback(func(): upgrade_panel.visible = false; Game.is_paused = false)
-	tw.finished.connect(func(): _update_hud())
+	tw.finished.connect(func():
+		_update_hud()
+		if _pending_level_ups > 0:
+			_open_next_upgrade_panel()
+	)
 
 # ========== 塔位拖放系统 ==========
 func _on_tower_drag_start(tw_data: Dictionary) -> void:

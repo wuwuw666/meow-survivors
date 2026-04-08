@@ -167,7 +167,8 @@ func _setup_health() -> void:
 
 func _setup_collision() -> void:
 	collision_layer = ENEMY_LAYER
-	collision_mask = PLAYER_LAYER | ENEMY_LAYER
+	# Enemies should not body-block the player; damage comes from the hitbox.
+	collision_mask = ENEMY_LAYER
 	var cs := $CollisionShape2D as CollisionShape2D
 	var radius = _data.body_size
 	if cs and cs.shape is CircleShape2D:
