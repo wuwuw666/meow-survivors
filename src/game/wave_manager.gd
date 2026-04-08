@@ -20,7 +20,7 @@ var _enabled: bool = false
 var _main_game: Node = null
 
 func _ready() -> void:
-	pass
+	add_to_group("wave_system")
 
 func enable_waves() -> void:
 	_enabled = true
@@ -60,6 +60,7 @@ func _process(delta: float) -> void:
 
 func _start_wave(wave_num: int) -> void:
 	current_wave = wave_num
+	Game.current_wave = wave_num
 	is_wave_active = true
 
 	if wave_num == 10 and not _boss_spawned:

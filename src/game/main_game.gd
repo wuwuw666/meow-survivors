@@ -247,6 +247,9 @@ func _get_alive_enemy_count() -> int:
 
 # ========== Wave system ==========
 func _on_wave_started(wave_num: int) -> void:
+	Game.current_wave = wave_num
+	if wave_label:
+		wave_label.text = "第 %d 波" % wave_num
 	_update_hud()
 	_show_wave_banner(wave_num)
 
@@ -588,8 +591,11 @@ func _build_ui() -> void:
 	var shop_margin := MarginContainer.new()
 	shop_margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# 固定位置放置，避免 Anchor 受分辨率和其它层级挤压影响
-	shop_margin.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
-	shop_margin.position = Vector2(20, 600)  # 在 1280x720 环境下的左下方
+	shop_margin.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	shop_margin.offset_left = 20
+	shop_margin.offset_top = -100
+	shop_margin.offset_right = 20
+	shop_margin.offset_bottom = -20
 	ui.add_child(shop_margin)
 
 	var shop_hbox := HBoxContainer.new()
@@ -982,13 +988,14 @@ func _show_game_over_panel() -> void:
 	vbox.add_child(title)
 
 	var stats := Label.new()
-	stats.text = "存活到第 %d 波 | Lv.%d | 💰%d\n\n按 R 重新开始" % [_wave, Game.player_level, Game.player_coins]
+	var final_wave := Game.current_wave
+	if wave_manager:
+		final_wave = wave_manager.current_wave
+	stats.text = "存活到第 %d 波 | Lv.%d | 💰%d\n\n按 R 重新开始" % [final_wave, Game.player_level, Game.player_coins]
 	stats.add_theme_font_size_override("font_size", 17)
 	stats.position = Vector2(0, 20)
 	stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(stats)
-
-	_spawn_timer = 0
 
 # ========== Helper ==========
 func _random_edge_position() -> Vector2:
