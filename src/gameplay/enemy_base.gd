@@ -169,8 +169,29 @@ func _setup_collision() -> void:
 	collision_layer = ENEMY_LAYER
 	collision_mask = PLAYER_LAYER | ENEMY_LAYER
 	var cs := $CollisionShape2D as CollisionShape2D
+	var radius = _data.body_size
 	if cs and cs.shape is CircleShape2D:
-		(cs.shape as CircleShape2D).radius = _data.body_size
+		(cs.shape as CircleShape2D).radius = radius
+		
+	# 动态添加 HitboxComponent 方便伤害碰触到的玩家实体
+	var hitbox = HitboxComponent.new()
+	hitbox.name = "HitboxComponent"
+	hitbox.damage = _data.get("damage", 10)
+	hitbox.damage_tick_rate = 1.0 # 如果玩家一直碰到，每秒受到一次伤害
+	
+	# 设置 Hitbox 层级 (通常监控 Hurtbox，这里设置监控和实体层一致)
+	hitbox.collision_mask = PLAYER_LAYER
+	hitbox.collision_layer = 0
+	
+	# 加入一个形状，刚好比本体大一点点
+	var hitbox_cs = CollisionShape2D.new()
+	var circle = CircleShape2D.new()
+	circle.radius = radius + 2.0
+	hitbox_cs.shape = circle
+	hitbox.add_child(hitbox_cs)
+	
+	add_child(hitbox)
+
 
 func _find_hero() -> void:
 	_hero = get_tree().get_first_node_in_group("player")
