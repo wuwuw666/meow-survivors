@@ -1,435 +1,393 @@
 # 波次系统 (Wave System)
 
-> **Status**: In Design
-> **Author**: [user + agents]
-> **Last Updated**: 2026-04-03
-> **Implements Pillar**: 成长的爽感 + 策略有深度
+> **Status**: In Design  
+> **Author**: [user + agents]  
+> **Last Updated**: 2026-04-09  
+> **Implements Pillar**: 成长的爽感（节奏推进）+ 策略有深度（防线阶段压力）
 
 ## Overview
 
-波次系统是核心循环的**状态机驱动者**（Core Loop Orchestrator），负责串联难度曲线系统、敌人生成系统和结算/升级流程，管理"开始一波 → 刷怪 → 清场 → 升级窗口 → 下一波"的完整循环。
+波次系统（Wave System）是《喵族幸存者》局内节奏的调度器。  
+它负责把一局 4-8 分钟的短局体验切成清晰的阶段，让玩家在“布防、补位、清怪、升级、下一波”之间形成稳定节奏。
 
-波次系统不决定刷什么怪、刷多少、怎么刷——这些由难度曲线系统提供 `WaveConfig`，敌人生成系统执行刷怪。波次系统的职责是**知道当前处于循环的哪个阶段、何时触发阶段切换、何时结束当前波、何时启动下一波、以及何时因玩家死亡而结束一整局游戏**。
+在当前设计方向中，波次系统的职责不是“代替经验系统发升级”，而是：
 
-**核心职责**：从难度曲线系统获取波次配置 → 驱动敌人生成系统开始/停止刷怪 → 监听刷怪完成信号 → 追踪场上存活敌人 → 所有敌人清空后进入升级窗口 → 升级窗口结束后启动下一波 → 玩家死亡时结束游戏。
+- 推进敌潮节奏
+- 控制每波压力曲线
+- 提供短暂但明确的呼吸感
+- 为经验升级和防线调整留出空间
+- 把整局推向第 10 波 Boss 的高潮
 
-**核心接口**:
-- `start_wave() -> void` — 启动当前波次（自动请求 WaveConfig 并驱动生成系统）
-- `get_current_wave() -> int` — 返回当前波次编号
-- `is_wave_active() -> bool` — 查询是否有波次正在进行
-- `signal wave_started(wave_number: int)` — 新波次开始时发出
-- `signal wave_completed(wave_number: int)` — 一波完全结束时发出
+**核心职责**：
+
+- 启动与结束每一波
+- 驱动敌人生成系统开始/停止生成
+- 追踪当前波是否清场
+- 在波与波之间提供很短的整理窗口
+- 在第 10 波构建明确高潮
+- 在玩家死亡时终止推进
+
+**核心接口**：
+
+- `start_wave() -> void`
+- `get_current_wave() -> int`
+- `is_wave_active() -> bool`
+- `signal wave_started(wave_number: int)`
+- `signal wave_cleared(wave_number: int)`
+- `signal intermission_started(wave_number: int)`
+- `signal boss_wave_started()`
+- `signal game_over(wave_number: int)`
 
 ---
 
 ## Player Fantasy
 
-波次系统是**隐形的节拍器**——玩家不会直接看到它，但每一次"这波怪清完了，好爽，等一下又有怪来了"的节奏感都来源于它的调度。
+波次系统带来的体验，不是“怪随机一直来”，而是：
 
-**情感目标**：**节奏感 + 阶段跃迁感**
-- 玩家能明确感知"一波结束了"和"新一波开始了"，有清晰的呼吸节奏
-- 每波之间有短暂的喘息时间，让玩家升级、恢复、思考策略
-- 里程碑波（3/6/10）开始时有更强的视觉/听觉提示，让玩家感到"这局不一样"
-- Boss 波（第 10 波）前有明显的"最终警告"感，形成完整的 run 高潮
+- “这一波我守住了。”
+- “我终于有一点点时间看下局势。”
+- “下一波更强了，但我的线也更成型了。”
+- “第 10 波来了，这就是整局的高潮。”
 
-**玩家应该感受到**:
-- "一波接着一波，但我有时间喘口气，有时间选择升级。"
-- "第 10 波来了的时候，我知道这是整局的高潮。"
-- "清完了所有怪 → 奖励升级 → 下一波更强 → 我更强了 → 再来！"
+玩家应该感受到：
 
-**玩家不应该感受到**:
-- "什么时候一波结束了？我怎么没感觉？"
-- "我还在清怪呢怎么下一波就开始了？"
-- "打完 Boss 直接就死了？连个结算都没有？"
+- 压力是逐波升级的
+- 每波结束都有短促但真实的喘息
+- 一局是不断累积成型，而不是混乱拖长
+
+玩家不应该感受到：
+
+- 波次存在感很弱，像无尽刷怪
+- 波间停顿太长，破坏短局节奏
+- 波间停顿太短，完全没有整理价值
+- 升级和波次互相打架，不知道到底是谁在驱动成长
+
+---
+
+## Design Direction
+
+### 波次系统服务“短局塔防成长”
+
+当前项目已经明确：
+
+- **MVP 一局目标时长：4-8 分钟**
+- **经验升级是主要成长入口**
+- **波次系统负责节奏、压力和高潮**
+
+因此波次系统不应该承担“主要升级触发器”的职责。  
+它可以与升级系统协作，但不能抢走经验成长的主轴。
+
+### 波间整理窗口要短
+
+波次结束后允许有一个简短整理窗口，但它的目的不是长时间停顿，而是：
+
+- 让玩家意识到“这波结束了”
+- 给玩家一点点观察与调整机会
+- 给 UI 明确的节奏反馈
+- 让下一波开始更有推动感
+
+MVP 设计建议：
+
+- 普通波整理时间：`1.0 - 2.0s`
+- Boss 前提示时间：`2.0 - 3.0s`
 
 ---
 
 ## Detailed Design
 
-### Core Rules
+### 规则 1：波次生命周期
 
-#### 规则 1：波次生命周期
+当前版本采用简化状态机：
 
-每波经历以下阶段：
-
-```
-Idle → Spawning → Clearing → UpgradeWindow → (循环) → Idle
-  ↑                                           │
-  └──────────── 下一波 ─────────────────────────┘
+```text
+Idle → Spawning → Clearing → Intermission → Idle
+                           ↘
+                            GameOver
 ```
 
-**各阶段定义**:
+状态定义：
 
-| 阶段 | 说明 | 持续时间 |
-|------|------|---------|
-| **Idle** | 等待中，无活跃波次 | 游戏启动时或玩家死亡后 |
-| **Spawning** | 敌人生成系统正在按 WaveConfig 刷怪 | WaveConfig.duration_sec 内的刷怪期 |
-| **Clearing** | 刷怪预算已消耗完，场上仍有残敌需清理 | 动态，取决于清怪速度 |
-| **UpgradeWindow** | 全部敌人已清零，打开升级选择窗口 | WaveConfig.upgrade_pause_sec 或玩家确认后立即继续 |
+| 状态 | 说明 |
+|------|------|
+| **Idle** | 等待下一波开始 |
+| **Spawning** | 当前波正在生成敌人 |
+| **Clearing** | 当前波已停止生成，等待场上残敌清完 |
+| **Intermission** | 短暂整理窗口，准备下一波 |
+| **GameOver** | 玩家死亡，本局结束 |
 
-#### 规则 2：启动流程
+### 规则 2：开始一波
 
 ```gdscript
 func start_wave() -> void:
     if state != State.Idle:
-        push_error("WaveSystem: start_wave called while %s, must be Idle" % state)
         return
 
     current_wave += 1
-    config = difficulty_curve.get_wave_config(current_wave)
-
     state = State.Spawning
     wave_started.emit(current_wave)
 
-    # 通知敌人生成系统开始刷怪
-    spawn_system.start_spawning(config)
-    clear_timer = 0.0
+    if current_wave == 10:
+        boss_wave_started.emit()
+
+    spawn_system.start_spawning(get_wave_config(current_wave))
 ```
 
-#### 规则 3：Spawning → Clearing 转换
+设计说明：
 
-当收到 `spawn_system.spawning_finished` 信号时：
+- 波次系统负责开始一波
+- 难度曲线系统负责给出这波配置
+- 敌人生成系统负责执行落地生成
+
+### 规则 3：Spawning → Clearing
+
+当敌人生成系统发出 `spawning_finished` 时：
 
 ```gdscript
-func _on_spawning_finished(_total_spawned: int) -> void:
+func _on_spawning_finished() -> void:
     state = State.Clearing
-    clear_timer = 0.0
 ```
 
-- 进入 Clearing 后不再刷怪。
-- 清场阶段持续检测场上存活敌人数量（通过订阅 `health_system.enemy_died` 和 `player_died` 信号维持计数）。
-- 当存活敌人计数归零且 clear_timer >= CLEARING_LEEWAY_SEC（默认 1.0 秒，确保没有延迟刷怪/生成动画中的敌人）时，自动转入 UpgradeWindow。
+进入 `Clearing` 后：
 
-#### 规则 4：清场倒计时
+- 不再生成新敌人
+- 等待场上敌人全部清完
+- 让玩家获得“这波已经收尾”的感知
+
+### 规则 4：清场判定
 
 ```gdscript
-func _process(delta: float) -> void:
-    if state == State.Clearing:
-        clear_timer += delta
-        if _alive_enemies == 0 and clear_timer >= CLEARING_LEEWAY_SEC:
-            _start_upgrade_window()
-
-    if state == State.UpgradeWindow:
-        upgrade_window_timer -= delta
-        # 玩家点击跳过或超时自动继续
-        if _should_proceed():
-            _end_upgrade_window()
+if state == State.Clearing and alive_enemies == 0:
+    _start_intermission()
 ```
 
-#### 规则 5：Clearing → UpgradeWindow → Spawning（下一波）
+MVP 建议：
+
+- 可以加入 `0.5 - 1.0s` 的 leeway，防止敌人刚死就立刻切状态显得突兀
+- 不建议让 Clearing 持续太久
+
+### 规则 5：Intermission 是短整理，不是主升级阶段
 
 ```gdscript
-func _start_upgrade_window() -> void:
-    state = State.UpgradeWindow
-    upgrade_window_timer = config.upgrade_pause_sec
-    upgrade_panel_opened.emit(current_wave)
-
-func _end_upgrade_window() -> void:
-    upgrade_panel_closed.emit()
-    state = State.Idle
-    wave_completed.emit(current_wave)
-
-    # 如果玩家选择继续（非无尽模式且玩家未死亡）
-    if should_continue:
-        call_deferred("start_wave")  # 下一波
+func _start_intermission() -> void:
+    state = State.Intermission
+    wave_cleared.emit(current_wave)
+    intermission_started.emit(current_wave)
+    intermission_timer = get_intermission_duration(current_wave)
 ```
 
-- `should_continue` 在 MVP 阶段始终为 `true`（自动继续下一波）。
-- v1.0 可扩展为：第 10 波完成后弹出"继续无尽模式？"确认面板。
+Intermission 的职责：
 
-#### 规则 6：玩家死亡处理
+- 提示这波结束
+- 给玩家短暂呼吸感
+- 给系统机会刷新 UI、波次 Banner、Boss 提示
+- 给玩家处理已经触发的经验升级选择
+
+Intermission **不负责**：
+
+- 作为主要升级来源
+- 承担长时间结算
+- 让玩家停留很久
+
+### 规则 6：Intermission → 下一波
+
+```gdscript
+if state == State.Intermission:
+    intermission_timer -= delta
+    if intermission_timer <= 0:
+        state = State.Idle
+        call_deferred("start_wave")
+```
+
+普通波节奏建议：
+
+- Wave 1-3：更从容，帮助熟悉节奏
+- Wave 4-7：开始压缩呼吸感
+- Wave 8-9：接近连续施压
+- Wave 10：单独做 Boss 提示与高潮构建
+
+### 规则 7：Boss 波是整局高潮
+
+第 10 波必须在节奏上被明确标记出来：
+
+- 开始前有更强提示
+- 敌人生成方式和普通波不同
+- 压力曲线明显抬升
+- 结算反馈要让玩家知道“这就是一局的峰值”
+
+Boss 波前推荐：
+
+```text
+Intermission 延长到 2-3s
+显示 Boss 提示 UI
+强化音画反馈
+再进入 Wave 10
+```
+
+### 规则 8：经验升级与波次系统的关系
+
+这是当前版本最重要的设计约束：
+
+**经验升级是主成长入口，波次系统只是给成长留节奏空间。**
+
+因此：
+
+- 升级主要由经验系统触发
+- 波次系统不要求“每波结束必须弹升级”
+- 如果玩家在波末刚好升级，可以在 Intermission 或下一波早段完成选择
+- 波次系统应该兼容升级暂停，但不依赖它
+
+### 规则 9：玩家死亡处理
 
 ```gdscript
 func _on_player_died() -> void:
     spawn_system.stop_spawning()
     state = State.GameOver
-    game_over.emit(current_wave)  # 通知结算系统
+    game_over.emit(current_wave)
 ```
 
-- 收到 `player_died` 信号后立即停止所有刷怪。
-- 进入 GameOver 状态，不再自动推进波次。
-- 由结算系统消费 `game_over` 信号展示结果。
+要求：
 
-#### 规则 7：无尽模式衔接
+- 死亡后立即停止波次推进
+- 不再进入下一波
+- 交给结算系统和 UI 系统接管
 
-第 10 波完成后：
+### 规则 10：MVP 不以无尽模式为当前主目标
 
-```gdscript
-if current_wave == 10 and player_chose_continue:
-    # 切换到无尽模式
-    state = State.Idle
-    current_wave = 10  # 保持为10，但用 endless_depth 追踪
-    endless_depth += 1
-    start_endless_wave()
+无尽模式可以作为以后扩展，但不应影响当前 MVP 文档主结构。
 
-func start_endless_wave():
-    config = difficulty_curve.get_endless_wave_config(current_wave, endless_depth)
-    state = State.Spawning
-    wave_started.emit(current_wave)
-    spawn_system.start_spawning(config)
-```
+当前优先级：
 
-- 无尽模式下 `current_wave` 保持为 10。
-- `endless_depth` 递增（第 1 轮无尽 = depth 1, 第 2 轮 = depth 2）。
-- `endless_wave_completed` 信号与 `wave_completed` 复用同一接口，但附带 `is_endless=true` metadata。
-
-#### 规则 8：存活敌人计数器
-
-波次系统维护 `_alive_enemies: int`：
-
-- **增加**：订阅 `spawn_system.enemy_spawned` 信号，每刷一个敌人 `_alive_enemies += 1`。
-- **减少**：订阅 `health_system.enemy_died` 信号，每死一个敌人 `_alive_enemies -= 1`（确保不 < 0）。
-- **归零判定**：`_alive_enemies == 0` 且状态为 Clearing → 触发升级窗口。
+- 先把 10 波短局做扎实
+- 先验证 Boss 波高潮是否成立
+- 先验证一局打完后是否有“再来一局”的动机
 
 ---
 
-### States and Transitions
+## Pressure Curve
 
-| 状态 | 进入条件 | 退出条件 | 行为 |
-|------|---------|---------|------|
-| **Idle** | 游戏启动、Wave 完成、升级窗口关闭 | `start_wave()` 调用 | 空闲等待，不驱动任何系统 |
-| **Spawning** | `start_wave()` 执行完毕后 | 收到 `spawning_finished` 信号 | 驱动 enemy_spawn_system 刷怪 |
-| **Clearing** | `spawning_finished` 信号收到后 | `_alive_enemies == 0` 且 clear_timer >= 1.0s | 等待场上敌人全部死亡 |
-| **UpgradeWindow** | 清场完成且存活敌人为零 | 玩家确认或计时器超时 | 打开升级面板，等待选择 |
-| **GameOver** | 收到 `player_died` 信号 | 无（本局结束） | 停止一切，等待结算系统接管 |
+### Wave 1-3：建立理解
 
-```
-┌──────┐   start_wave()     ┌──────────┐  spawning_finished  ┌──────────┐
-│ Idle │ ──────────────────→│ Spawning │ ───────────────────→│ Clearing │
-└──┬───┘                     └─────┬────┘                      └────┬─────┘
-   │                               │                                │
-   │                          player_died          alive==0 + leeway│
-   │                               │                                │
-   │                               ▼                                ▼
-   │                        ┌──────────┐                   ┌───────────────┐
-   │                        │ GameOver │                   │ UpgradeWindow │
-   │                        └──────────┘                   └───────┬───────┘
-   │                                ▲                               │
-   │                                │        player_confirmed       │
-   │                                │        or timer_expired       │
-   │                                │                               │
-   │          start_wave (next) ←──┘ ─────────────────────────────┘
-   └────────── game_over signal
-```
+- 让玩家学会补位和基础布防
+- 给玩家第一次感受到“塔比角色更重要”
+- Intermission 可以略长
 
-### Interactions with Other Systems
+### Wave 4-7：防线成型
 
-| 系统 | 交互方向 | 数据流 | 说明 |
-|------|---------|--------|------|
-| **难度曲线系统** | 波次 → 难度曲线 | `get_wave_config(wave_number)` | 每波开始前调用一次，获取 WaveConfig（硬依赖） |
-| **敌人生成系统** | 波次 → 敌人生成 | `start_spawning(config)` / `stop_spawning()` | 驱动刷怪开始和强制停止（硬依赖） |
-| **敌人生成系统** | 敌人生成 → 波次 | `spawning_finished`, `spawning_stopped`, `enemy_spawned` 信号 | 判断何时转 Clearing 和维护存活计数（硬依赖） |
-| **生命值系统** | 生命值 → 波次 | `player_died`, `enemy_died` 信号 | 玩家死亡触发 GameOver；敌人死亡用于存活计数（硬依赖） |
-| **升级选择系统** | 波次 → 升级选择 | `upgrade_panel_opened(wave_number)` / `upgrade_panel_closed` 信号 | 打开/关闭升级面板的通知（软依赖，MVP 可仅通知） |
-| **结算系统** | 波次 → 结算 | `game_over(current_wave, is_endless)` 信号 | 玩家死亡时通知结算系统（硬依赖） |
-| **UI系统** | 波次 → UI | `wave_started`, `wave_completed` 信号 | 波次编号显示、里程碑提示（软依赖） |
+- 开始要求玩家做更明确的升级和塔位决策
+- 让辅助塔和覆盖关系开始有价值
+- 让玩家感到“防线开始滚雪球”
+
+### Wave 8-9：高压前奏
+
+- 清场速度变得重要
+- 错误的升级和布防会明显放大风险
+- Intermission 压缩到非常短
+
+### Wave 10：高潮验证
+
+- 必须检验前面所有成长是否有效
+- 要让玩家明确知道这波是结尾峰值
 
 ---
 
 ## Formulas
 
-### 1. 波次总时长预估
+### 公式 1：整局时长估算
 
-```
-expected_wave_duration = spawn_expected_duration + clearing_duration + upgrade_window_duration
-
-其中:
-    spawn_expected_duration = spawn_budget * spawn_interval_sec    (仅近似)
-    clearing_duration = avg_enemy_lifetime * (enemies_remaining_at_spawning_end / players_dps)
-    upgrade_window_duration = WaveConfig.upgrade_pause_sec
+```text
+run_duration =
+    sum(spawn_duration_per_wave)
+    + sum(clearing_duration_per_wave)
+    + sum(intermission_duration_per_wave)
 ```
 
-**示例计算（第 1 波）**：
-```
-spawn_budget = 12
-spawn_interval = 1.20s
-spawn_expected ≈ 12 * 1.20 = 14.4s
-clearing ≈ 0.5s (敌人数量少)
-upgrade_window = 5.0s (假设)
+MVP 目标：
 
-total ≈ 14.4 + 0.5 + 5.0 = 19.9s ≈ 20s
+```text
+4 - 8 分钟
 ```
 
-### 2. 全 10 波总时长预估
+### 公式 2：每波体感长度
 
-```
-total_run_duration = Σ(wave_duration for w in 1..10)
-```
-
-按示例表各波 duration_sec 估算：
-
-| 波次 | 估算总时长（含清场+升级） |
-|------|-------------------------|
-| 1 | ~20s |
-| 2 | ~22s |
-| 3 | ~25s |
-| 4 | ~24s |
-| 5 | ~27s |
-| 6 | ~30s |
-| 7 | ~28s |
-| 8 | ~29s |
-| 9 | ~30s |
-| 10 | ~35s |
-| **合计** | **~270s ≈ 4.5 分钟** |
-
-> 参考 Vampire Survivors 的 30 分钟一局和 Brotato 的 3-5 分钟一局，本 MVP 单 run 约 4-5 分钟，符合"快节奏一局一尝试"的设计意图。
-
-### 3. 存活敌人计数器公式
-
-```
-初始: _alive_enemies = 0
-
-每帧:
-    on enemy_spawned:     _alive_enemies += 1
-    on enemy_died:        _alive_enemies = max(0, _alive_enemies - 1)
-
-清场判定:
-    _alive_enemies == 0 AND state == Clearing AND clear_timer >= CLEARING_LEEWAY_SEC
-        → 转 UpgradeWindow
+```text
+wave_feel_duration =
+    spawn_duration
+    + remaining_cleanup_time
+    + short_intermission
 ```
 
-### 4. 无尽模式波次编号
+设计原则：
 
-```
-显示给玩家的波次:
-    if not is_endless:
-        display_wave = current_wave
-    else:
-        display_wave = "E" + str(endless_depth)  # 如 "E1", "E2"
+- 单波不能太长，否则短局失焦
+- 单波不能太短，否则防线成长来不及形成感知
 
-内部追踪:
-    current_wave 在无尽模式中始终为 10
-    endless_depth 每轮无尽 +1
+### 公式 3：Intermission 参考值
+
+```text
+normal_wave_intermission = 1.2s ~ 1.8s
+boss_prep_intermission = 2.0s ~ 3.0s
 ```
+
+### 公式 4：波次价值判断
+
+```text
+wave_value = pressure_gain + growth_window + pacing_clarity
+```
+
+一波如果没有同时提供：
+
+- 压力变化
+- 成长空间
+- 节奏清晰度
+
+那这波就不是有效波次。
 
 ---
 
 ## Edge Cases
 
-| 编号 | 边界情况 | 触发条件 | 处理方式 |
-|------|---------|---------|---------|
-| EC-01 | **刷怪完成但场上无敌人** | spawn_budget > 0 但所有敌人生成后瞬间死亡（如玩家爆发伤害极高） | Clearing 状态下 `_alive_enemies == 0` 已为 0，clear_timer 到 1.0s 后正常进入 UpgradeWindow。无需额外处理 |
-| EC-02 | **玩家死亡时正在刷怪** | spawning 阶段触发 `player_died` | 立即调用 `spawn_system.stop_spawning()`，转 GameOver。已刷出的敌人留在场上但不影响结算 |
-| EC-03 | **玩家死亡时正在清场** | Clearing 阶段，场上有残敌 | 不等待清场完成，立即转 GameOver |
-| EC-04 | **玩家死亡时正在升级窗口** | UpgradeWindow 阶段，面板打开中 | 关闭升级面板（`upgrade_panel_closed.emit()`），转 GameOver |
-| EC-05 | **难度曲线系统返回 null 配置** | `get_wave_config(wave_number)` 返回无效值 | 输出严重错误日志，不启动刷怪，保持在 Idle 状态。这是设计配置错误而非运行时异常 |
-| EC-06 | **存活计数器出现负数** | enemy_died 信号比 enemy_spawned 多（极端时序 bug） | `_alive_enemies = max(0, _alive_enemies - 1)` 钳制，防止负数。同时输出 warning 日志 |
-| EC-07 | **Clearing 阶段超时** | 场上有"卡住"的敌人导致 `_alive_enemies > 0` 超过 60 秒 | 设置清场超时阈值 `CLEARING_TIMEOUT_SEC = 60s`，超时后强制进入 UpgradeWindow 并输出 warning。防止无限卡关 |
-| EC-08 | **波次系统在非 Idle 状态收到 start_wave()** | 外部系统误调用 | 输出错误日志，忽略调用。不重置状态，防止打断正在进行的波次 |
-| EC-09 | **游戏暂停期间清场计时** | 升级面板打开导致 `time_scale = 0` | Clearing 的 `clear_timer` 基于 `_process(delta)` 计时，`delta` 在暂停时为 0，因此计时器自然暂停，正确 |
-| EC-10 | **第 10 波完成后自动进入无尽 vs 结束** | MVP 阶段未实现"是否继续"确认 | MVP 第 10 波完成后**自动结束游戏**（进入 GameOver），结算系统展示结果。v1.0 添加"继续无尽模式"确认面板 |
-| EC-11 | **升级窗口期间玩家未做任何选择** | 玩家挂机 | 超时后自动关闭升级面板并进入下一波。MVP 暂不实现超时自动跳过，假设玩家至少点击"开始"按钮 |
-| EC-12 | **敌人生成失败导致场上敌人数永远达不到 spawn_budget** | 敌人生成系统返回 null 但仍扣除预算 | 波次系统不关心实际生成了多少敌人，只关心 `_alive_enemies` 和 `spawning_finished` 信号。生成系统预算扣除正确即可 |
+| 编号 | 边界情况 | 处理方式 |
+|------|----------|----------|
+| EC-01 | 刚清完最后一只怪又立刻触发升级暂停 | 允许进入 Intermission，但计时应兼容暂停 |
+| EC-02 | 玩家在 Intermission 中死亡（理论上极少） | 立即切入 GameOver |
+| EC-03 | 敌人生成结束但场上早已无敌人 | 直接进入短 Intermission |
+| EC-04 | 场上残敌卡住导致长时间无法清场 | 设置 Clearing 超时保护，防止一局卡死 |
+| EC-05 | 第 10 波前玩家刚好升级 | 允许先完成升级，再进入 Boss 波 |
+| EC-06 | Intermission 过长导致体验拖沓 | 通过参数压缩，不允许超过短局节奏上限 |
+| EC-07 | Intermission 过短导致玩家无感 | 必须至少提供可感知提示与最短整理时间 |
 
 ---
 
 ## Dependencies
 
-### 上游依赖（波次系统依赖的系统）
+### 上游依赖
 
 | 系统 | 依赖类型 | 接口 | 说明 |
-|------|---------|------|------|
-| **难度曲线系统** | 硬依赖 | `get_wave_config(wave_number) -> WaveConfig` | 每波配置唯一来源 |
-| **敌人生成系统** | 硬依赖 | `start_spawning(config)`, `stop_spawning()`, 信号 `spawning_finished`, `enemy_spawned` | 驱动刷怪、监听刷完 |
-| **生命值系统** | 硬依赖 | 信号 `player_died`, `enemy_died` | 玩家死亡和游戏结束判定；敌人计数 |
+|------|----------|------|------|
+| **难度曲线系统** | 硬依赖 | `get_wave_config(wave_number)` | 每波配置来源 |
+| **敌人生成系统** | 硬依赖 | `start_spawning(config)`, `stop_spawning()` | 执行敌人生成 |
+| **生命值系统** | 硬依赖 | `player_died`, `enemy_died` | 用于 GameOver 与清场 |
 
-### 下游依赖（依赖波次系统的系统）
+### 下游依赖
 
 | 系统 | 依赖类型 | 接口 | 说明 |
-|------|---------|------|------|
-| **升级选择系统** | 硬依赖 | 信号 `wave_started`, `upgrade_panel_opened` | 波次结束后打开升级面板 |
-| **结算系统** | 硬依赖 | 信号 `game_over(wave_number, is_endless)` | 玩家死亡时展示结算 |
-| **UI系统** | 软依赖 | 信号 `wave_started(wave_number)`, `wave_completed(wave_number)` | 波次编号、里程碑提示 |
-
-### GDScript 接口定义
-
-```gdscript
-# ============================================================
-# WaveSystem.gd
-# 波次系统 — 核心循环状态机
-# 挂载到游戏场景的管理节点下
-# ============================================================
-class_name WaveSystem
-extends Node
-
-## 状态枚举
-enum State { Idle, Spawning, Clearing, UpgradeWindow, GameOver }
-
-# ---------- 信号 ----------
-signal wave_started(wave_number: int)
-signal wave_completed(wave_number: int)
-signal game_over(wave_number: int, is_endless: bool)
-signal upgrade_panel_opened(wave_number: int)
-signal upgrade_panel_closed()
-
-# ---------- 导出变量 ----------
-## 清场阶段等待全部敌人死亡的额外等待时间（秒）
-@export var clearing_leeway_sec: float = 1.0
-
-## 清场超时上限（秒），防止永久卡关
-@export var clearing_timeout_sec: float = 60.0
-
-# ---------- 运行时状态 ----------
-var state: State = State.Idle
-var current_wave: int = 0
-var endless_depth: int = 0
-var config: WaveConfig = null
-var clear_timer: float = 0.0
-var upgrade_window_timer: float = 0.0
-var _alive_enemies: int = 0
-
-# ---------- 系统引用 ----------
-var difficulty_curve: Node = null
-var spawn_system: Node = null
-
-# ---------- 公开 API ----------
-func start_wave() -> void
-func get_current_wave() -> int
-func get_current_config() -> WaveConfig
-func is_wave_active() -> bool
-func get_alive_enemy_count() -> int
-func get_state() -> State
-func get_state_name() -> String
-```
+|------|----------|------|------|
+| **UI系统** | 软依赖 | `wave_started`, `wave_cleared`, `boss_wave_started` | 更新波次提示与节奏反馈 |
+| **敌人生成系统** | 软依赖 | 接收波次配置 | 受波次驱动 |
+| **结算系统** | 硬依赖 | `game_over(current_wave)` | 一局结束后接管 |
+| **升级系统 / 经验系统** | 协作依赖 | 暂停、升级触发 | 波次为其留空间，但不主导其逻辑 |
 
 ---
 
 ## Tuning Knobs
 
-| 参数名 | 类型 | 默认值 | 安全范围 | 影响 |
-|--------|------|--------|---------|------|
-| `clearing_leeway_sec` | float | 1.0 | 0.5-2.0 | 清场后额外等待时间。过短可能导致延迟生成的敌人被意外跳过；过长拖慢节奏 |
-| `clearing_timeout_sec` | float | 60.0 | 30.0-120.0 | 清场超时上限。过短时强力 build 可能还没享受清场乐趣就被强制跳过；过长时卡关永久无法通关 |
-| `auto_start_next_wave` | bool | true (MVP) | true/false | 是否自动启动下一波。MVP 默认自动，v1.0 可改为手动确认 |
-
-**参数交互**：
-- `clearing_leeway_sec` 应与敌人生成系统的 `spawn_animation_duration`（0.2s）共同调试。leeway 应 ≥ animation_duration 以确保最后一批敌人完全生成后再判定清场。
-
----
-
-## Visual/Audio Requirements
-
-### 视觉提示
-- **波次开始**：短暂的全屏"Wave X"文字动画（1 秒），Boss 波用更夸张的特效
-- **里程碑波**：第 3/6/10 波开始时，屏幕边框有可爱的闪光/抖动特效
-- **清场完成**：全部敌人死亡后，小粒子庆祝效果（1-2 秒）
-
-### 音频提示
-- **波次开始**：短促提示音（不同音高对应不同压力等级）
-- **Boss 波**：特殊的低沉警告音效，与正常波次区别明显
-- **清除完成**：轻松/愉快的短音效
-
----
-
-## UI Requirements
-
-| UI 元素 | 触发时机 | 内容 |
-|---------|---------|------|
-| 波次编号 | 始终显示（HUD） | 当前波次编号 "Wave X/10" |
-| 波次开始横幅 | `wave_started` 信号 | "Wave 3" 大字 + 小字提示（如 "Fast Enemies Incoming!"） |
-| 里程碑警告 | 第 3/6/10 波开始时 | Boss War / Milestone Wave 字样，颜色与正常不同 |
-| 升级面板 | UpgradeWindow 期间 | 3 选 1 升级选项 + "选择" / "随机" / "跳过"按钮 |
-| 结算面板 | `game_over` 信号 | 到达波次、击杀数、时长、评级等统计 |
+| 参数名 | 默认值 | 安全范围 | 说明 |
+|--------|--------|----------|------|
+| `wave_count` | 10 | 8-12 | MVP 总波数 |
+| `clearing_leeway_sec` | 0.7 | 0.3-1.5 | 清场切换缓冲 |
+| `intermission_sec` | 1.5 | 1.0-2.0 | 普通波整理时间 |
+| `boss_prep_sec` | 2.5 | 2.0-3.5 | Boss 波前准备时间 |
+| `clearing_timeout_sec` | 20 | 10-60 | 卡场保护 |
 
 ---
 
@@ -437,45 +395,27 @@ func get_state_name() -> String
 
 ### 功能测试
 
-| ID | 测试项 | 验证方法 | Pass 标准 |
-|----|-------|---------|----------|
-| AC-WV-01 | 状态机完整流转 | 启动游戏 → 等待 10 波自然流转 → 记录每次状态变化 | 每波均按 `Idle → Spawning → Clearing → UpgradeWindow → Idle` 完整流转，无状态卡死 |
-| AC-WV-02 | WaveConfig 正确消费 | 第 1 波，检查 `spawn_system.wave_config` | 波次系统传递的配置的 `spawn_budget`, `spawn_interval_sec`, `enemy_mix` 值与难度曲线返回的一致 |
-| AC-WV-03 | 存活敌人计数准确 | 第 1 波 spawn_budget=12，手动击杀 8 个敌人后暂停 | `_alive_enemies == 4`（精确匹配） |
-| AC-WV-04 | 清场阶段正确触发 | 场上所有敌人死亡后计时 | `_alive_enemies == 0` 后约 1.0s 内进入 UpgradeWindow 状态 |
-| AC-WV-05 | 玩家死亡触发游戏结束 | 刷怪过程中触发 `player_died` | `state == GameOver`，`game_over` 信号发出恰好 1 次，spawn_system 停止刷怪 |
-| AC-WV-06 | wave_started 信号发出 | 每波开始时监听 | `wave_started` 信号发出，wave_number 参数等于 current_wave |
-| AC-WV-07 | wave_completed 信号发出 | 每波升级窗口关闭后监听 | `wave_completed` 信号发出，wave_number 参数等于刚完成的波次 |
-| AC-WV-08 | current_wave 从 1 开始自增 | 记录每波开始时的 current_wave 值 | 序列为 1, 2, 3, ..., 10；不跳过、不重复 |
-| AC-WV-09 | 升级面板打开/关闭信号 | 监听 `upgrade_panel_opened(3)` 和 `upgrade_panel_closed` | 每波 Clearing 完成后发出 opened，玩家确认后发出 closed |
-| AC-WV-10 | 非 Idle 状态 start_wave 被拒绝 | Spawning 状态调用 start_wave() | 输出错误日志，状态不变，不启动新波次 |
-
-### 边界测试
-
-| ID | 测试项 | 验证方法 | Pass 标准 |
-|----|-------|---------|----------|
-| AC-WV-11 | 空波次处理（spawn_budget=0） | 难度曲线返回 spawn_budget=0 | 直接进入 Clearing → 存活敌人已为 0 → 1.0s 后进入 UpgradeWindow |
-| AC-WV-12 | 清场超时强制推进 | 场上放置 1 个不会死亡的敌人 | 60 秒后强制进入 UpgradeWindow，输出 warning |
-| AC-WV-13 | 存活计数不出现负数 | 模拟 enemy_died 信号在没有 enemy_spawned 的情况下触发 | `_alive_enemies` 不低于 0，输出 warning 日志 |
-| AC-WV-14 | 难度曲线返回 null 时安全处理 | 修改难度曲线让 get_wave_config 返回 null | 进入 Idle 状态并输出严重错误日志，程序不崩溃 |
-| AC-WV-15 | 升级窗口中玩家死亡 | 升级面板打开中触发 player_died | 关闭面板，转 GameOver，game_over 信号发出 |
+| ID | 测试项 | Pass 标准 |
+|----|--------|-----------|
+| AC-WV-01 | 启动第一波 | 游戏开始后能进入 Wave 1 |
+| AC-WV-02 | 正常清场切换 | 敌人清空后进入 Intermission |
+| AC-WV-03 | Intermission 后推进下一波 | 短暂停顿后自动进入下一波 |
+| AC-WV-04 | 第 10 波 Boss 提示 | Boss 波前有明显提示 |
+| AC-WV-05 | 玩家死亡中断波次 | 死亡后停止生成并结束推进 |
 
 ### 节奏测试
 
-| ID | 测试项 | 测试场景 | Pass 标准 |
-|----|-------|---------|----------|
-| AC-WV-16 | 第 1 波总时长 | 不击杀任何敌人，让波自然进行 | 从 wave_started 到下一个 wave_started 之间的总时间在 18-25 秒范围内 |
-| AC-WV-17 | 第 10 波总时长 | 第 10 波自然进行 | 从 wave_started 到 game_over/升级窗口打开之间的总时间在 30-45 秒范围内 |
-| AC-WV-18 | 完整 10 波运行 | 自动化测试模拟完整 run | 总游戏时长在 240-300 秒（4-5 分钟）范围内 |
+| ID | 测试项 | Pass 标准 |
+|----|--------|-----------|
+| AC-WV-P01 | 单局时长 | 一局稳定落在 4-8 分钟 |
+| AC-WV-P02 | 波间停顿感知 | 玩家能感觉到“这波结束了”，但不觉得拖 |
+| AC-WV-P03 | Boss 波高潮成立 | 第 10 波明显比普通波更有终局感 |
+| AC-WV-P04 | 短局重复意愿 | 一局结束后玩家愿意立刻再开一局 |
 
----
+### 设计验证
 
-## Open Questions
-
-| # | 问题 | 影响范围 | 建议方案 | 决策时间 |
-|---|------|---------|---------|---------|
-| OQ-01 | 第 10 波完成后是否自动进入无尽模式？ | 游戏流程 | **MVP 不实现无尽模式**——第 10 波完成后直接 GameOver 进入结算。v1.0 再添加"继续无尽"确认面板。 | 当前已确认 |
-| OQ-02 | 升级窗口是否支持玩家主动"跳过"升级直接进入下一波？ | 玩家体验，升级系统 | 升级选择系统需确认是否有"跳过不升级"功能。若有，波次系统监听 `upgrade_panel_closed` 后立即进入下一波，不等待超时。 | 待升级选择系统确认 |
-| OQ-03 | 是否需要在波次中间（非结束时）触发升级（如 Brotato 的波中小怪掉落升级）？ | 节奏设计 | **MVP 不做波中升级**。所有升级只在波次结束后的 UpgradeWindow 中处理。 | 当前假设为否 |
-| OQ-04 | 清场超时 60 秒是否合理？ | 卡关处理 | 根据原型测试调整。如果正常 build 清掉一波满场敌人平均 < 5 秒，则 60 秒绰绰有余。可以先设 30 秒做原型验证。 | 原型验证后 |
-| OQ-05 | 多个敌人"同帧"死亡时 enemy_died 信号可能连发，clearing 计时器是否会有问题？ | 时序安全 | 不会。每个 enemy_died 只减少 `_alive_enemies`，clear_timer 是持续累加的独立计时器。只要最终 _alive_enemies 归零，clear_timer 已经过了足够时间就会切换。 | 技术确认可行 |
+| ID | 问题 | Pass 标准 |
+|----|------|-----------|
+| AC-WV-D01 | 波次是否服务塔阵成长 | 玩家觉得每波都在推动防线成型 |
+| AC-WV-D02 | 升级主轴是否清晰 | 玩家能理解升级主要来自经验，而不是波末结算 |
+| AC-WV-D03 | 节奏是否够短够紧 | 玩家不会把这一局感知成拖长的无尽战 |
