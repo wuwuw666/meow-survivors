@@ -44,7 +44,7 @@ The project progresses through these stages:
 ### Gate: Concept → Systems Design
 
 **Required Artifacts:**
-- [ ] `design/gdd/game-concept.md` exists and has content
+- [ ] `design/concept/game-concept.md` exists and has content
 - [ ] Game pillars defined (in concept doc or `design/gdd/game-pillars.md`)
 
 **Quality Checks:**
@@ -180,7 +180,7 @@ For items that can't be automatically verified, **ask the user**:
 **Checked by**: gate-check skill
 
 ### Required Artifacts: [X/Y present]
-- [x] design/gdd/game-concept.md — exists, 2.4KB
+- [x] design/concept/game-concept.md — exists, 2.4KB
 - [ ] docs/architecture/ — MISSING (no ADRs found)
 - [x] production/sprints/ — exists, 1 sprint plan
 

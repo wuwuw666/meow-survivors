@@ -127,7 +127,7 @@ The `/design-systems` skill was renamed to `/map-systems` for clarity
 .claude/hooks/log-agent.sh
 .claude/hooks/validate-commit.sh
 README.md
-docs/WORKFLOW-GUIDE.md
+docs/process/WORKFLOW-GUIDE.md
 UPGRADING.md
 ```
 
@@ -240,7 +240,7 @@ versions directly with no risk to your project content.
 .claude/hooks/detect-gaps.sh
 .claude/hooks/session-start.sh
 production/session-state/.gitkeep
-docs/examples/README.md
+docs/reference/examples/README.md
 .github/ISSUE_TEMPLATE/bug_report.md
 .github/ISSUE_TEMPLATE/feature_request.md
 .github/PULL_REQUEST_TEMPLATE.md
@@ -272,8 +272,8 @@ docs/examples/README.md
 .claude/docs/quick-start.md
 .claude/docs/directory-structure.md
 .claude/docs/context-management.md
-docs/COLLABORATIVE-DESIGN-PRINCIPLE.md
-docs/WORKFLOW-GUIDE.md
+docs/process/COLLABORATIVE-DESIGN-PRINCIPLE.md
+docs/process/WORKFLOW-GUIDE.md
 README.md
 ```
 

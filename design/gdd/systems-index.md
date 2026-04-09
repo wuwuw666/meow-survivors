@@ -3,7 +3,7 @@
 > **Status**: Draft
 > **Created**: 2026-04-01
 > **Last Updated**: 2026-04-03
-> **Source Concept**: design/gdd/game-concept.md
+> **Source Concept**: design/concept/game-concept.md
 
 ---
 

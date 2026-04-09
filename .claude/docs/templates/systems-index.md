@@ -3,7 +3,7 @@
 > **Status**: [Draft / Under Review / Approved]
 > **Created**: [Date]
 > **Last Updated**: [Date]
-> **Source Concept**: design/gdd/game-concept.md
+> **Source Concept**: design/concept/game-concept.md
 
 ---
 

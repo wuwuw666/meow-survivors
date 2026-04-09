@@ -21,7 +21,7 @@ if [ -f ".claude/docs/technical-preferences.md" ]; then
 fi
 
 # Check if game concept exists
-if [ -f "design/gdd/game-concept.md" ]; then
+if [ -f "design/concept/game-concept.md" ]; then
   FRESH_PROJECT=false
 fi
 

@@ -25,7 +25,7 @@ the conversation opener.
 Check:
 - **Engine configured?** Read `.claude/docs/technical-preferences.md`. If the
   Engine field contains `[TO BE CONFIGURED]`, the engine is not set.
-- **Game concept exists?** Check for `design/gdd/game-concept.md`.
+- **Game concept exists?** Check for `design/concept/game-concept.md`.
 - **Source code exists?** Glob for source files in `src/` (`*.gd`, `*.cs`,
   `*.cpp`, `*.h`, `*.rs`, `*.py`, `*.js`, `*.ts`).
 - **Prototypes exist?** Check for subdirectories in `prototypes/`.
@@ -162,7 +162,7 @@ once the user has a clear next action.
   would you like to start fresh with a new concept?"
 - **User is returning (engine configured, concept exists)**: Skip onboarding
   entirely — "It looks like you're already set up! Your engine is [X] and you
-  have a game concept at `design/gdd/game-concept.md`. Want to pick up where
+  have a game concept at `design/concept/game-concept.md`. Want to pick up where
   you left off? Try `/sprint-plan` or just tell me what you'd like to work on."
 - **User doesn't fit any option**: Let them describe their situation in their
   own words and adapt. The 4 options are starting points, not a prison.

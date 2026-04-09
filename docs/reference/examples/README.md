@@ -187,13 +187,13 @@ After reading these examples, try this exercise:
    - ✅ Requests approval before writing files
 
 If the agent skips any of these, remind it:
-> "Please follow the collaborative protocol from docs/COLLABORATIVE-DESIGN-PRINCIPLE.md"
+> "Please follow the collaborative protocol from docs/process/COLLABORATIVE-DESIGN-PRINCIPLE.md"
 
 ---
 
 ## 📝 **Additional Resources**
 
-- **Full Principle Documentation:** [docs/COLLABORATIVE-DESIGN-PRINCIPLE.md](../COLLABORATIVE-DESIGN-PRINCIPLE.md)
-- **Workflow Guide:** [docs/WORKFLOW-GUIDE.md](../WORKFLOW-GUIDE.md)
+- **Full Principle Documentation:** [docs/process/COLLABORATIVE-DESIGN-PRINCIPLE.md](../../process/COLLABORATIVE-DESIGN-PRINCIPLE.md)
+- **Workflow Guide:** [docs/process/WORKFLOW-GUIDE.md](../../process/WORKFLOW-GUIDE.md)
 - **Agent Roster:** [.claude/docs/agent-roster.md](../../.claude/docs/agent-roster.md)
 - **CLAUDE.md (Collaboration Protocol):** [CLAUDE.md](../../CLAUDE.md#collaboration-protocol)

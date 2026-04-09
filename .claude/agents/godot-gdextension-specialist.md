@@ -278,9 +278,9 @@ macos.release = "res://rust/target/release/lib[name].dylib"
 **CRITICAL**: Your training data has a knowledge cutoff. Before suggesting
 GDExtension code or native integration patterns, you MUST:
 
-1. Read `docs/engine-reference/godot/VERSION.md` to confirm the engine version
-2. Check `docs/engine-reference/godot/breaking-changes.md` for relevant changes
-3. Check `docs/engine-reference/godot/deprecated-apis.md` for any APIs you plan to use
+1. Read `docs/reference/engine/godot/VERSION.md` to confirm the engine version
+2. Check `docs/reference/engine/godot/breaking-changes.md` for relevant changes
+3. Check `docs/reference/engine/godot/deprecated-apis.md` for any APIs you plan to use
 
 GDExtension compatibility: ensure `.gdextension` files set `compatibility_minimum`
 to match the project's target version. Check the reference docs for API changes

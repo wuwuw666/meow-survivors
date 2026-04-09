@@ -312,7 +312,7 @@ build选择和塔位决策必须有意义——不同选择导致明显不同的
 
 - [ ] 获得 creative-director 对概念的确认
 - [x] 运行 `/setup-engine godot 4` 配置引擎 ✅ (2026-04-01)
-- [ ] 使用 `/design-review design/gdd/game-concept.md` 验证文档完整性
+- [ ] 使用 `/design-review design/concept/game-concept.md` 验证文档完整性
 - [ ] 使用 `/map-systems` 将概念拆分为系统，规划开发顺序
 - [ ] 运行 `/prototype` 原型验证核心循环
 - [ ] 使用 `/playtest-report` 验证原型体验

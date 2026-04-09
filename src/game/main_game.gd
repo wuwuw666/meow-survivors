@@ -1,6 +1,6 @@
 ﻿## 主游戏场景 (Main Game)
 ## 游戏核心循环的总控：输入、生成、波次、升级、塔位、UI、结算
-## GDD: design/gdd/game-concept.md + systems-index.md
+## GDD: design/concept/game-concept.md + systems-index.md
 
 class_name MainGame
 extends Node2D

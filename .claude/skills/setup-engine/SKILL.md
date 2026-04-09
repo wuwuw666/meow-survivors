@@ -23,7 +23,7 @@ Three modes:
 If no engine is specified, run an interactive engine selection process:
 
 ### Check for existing game concept
-- Read `design/gdd/game-concept.md` if it exists — extract genre, scope, platform
+- Read `design/concept/game-concept.md` if it exists — extract genre, scope, platform
   targets, art style, team size, and any engine recommendation from `/brainstorm`
 - If no concept exists, inform the user:
   > "No game concept found. Consider running `/brainstorm` first to discover what

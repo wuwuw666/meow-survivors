@@ -13,7 +13,7 @@ When this skill is invoked:
    scratch.
 
 2. **Check for existing concept work**:
-   - Read `design/gdd/game-concept.md` if it exists (resume, don't restart)
+   - Read `design/concept/game-concept.md` if it exists (resume, don't restart)
    - Read `design/gdd/game-pillars.md` if it exists (build on established pillars)
 
 3. **Run through ideation phases** interactively, asking the user questions at
@@ -193,12 +193,12 @@ Ground the concept in reality:
    brainstorm conversation, including the MDA analysis, player motivation
    profile, and flow state design sections.
 
-5. **Save to** `design/gdd/game-concept.md`, creating directories as needed.
+5. **Save to** `design/concept/game-concept.md`, creating directories as needed.
 
 6. **Suggest next steps** (in this order — this is the professional studio
    pre-production pipeline):
    - "Run `/setup-engine [engine] [version]` to configure the engine and populate version-aware reference docs"
-   - "Use `/design-review design/gdd/game-concept.md` to validate completeness"
+   - "Use `/design-review design/concept/game-concept.md` to validate completeness"
    - "Discuss vision with the `creative-director` agent for pillar refinement"
    - "Decompose the concept into individual systems with `/map-systems` — maps dependencies, assigns priorities, and creates the systems index"
    - "Author per-system GDDs with `/design-system` — guided, section-by-section GDD writing"
