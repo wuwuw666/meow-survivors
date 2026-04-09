@@ -30,12 +30,12 @@ func try_take_damage(amount: int) -> bool:
 		_is_invincible = true
 		_invincible_timer = invincibility_duration
 		
-	took_damage.emit(amount)
-	
 	# 查找同级的 HealthComponent，自动扣血
 	if get_parent():
 		var hc = get_parent().get_node_or_null("HealthComponent") as HealthComponent
 		if hc:
-			hc.take_damage(amount)
+			hc.apply_damage(amount, {"kind": "contact"})
+			took_damage.emit(amount)
+			return true
 	
-	return true
+	return false

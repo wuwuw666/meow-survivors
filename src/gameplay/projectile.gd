@@ -98,7 +98,7 @@ func _do_hit_to(enemy: Node) -> void:
 	# 造成伤害
 	var hc: Node = enemy.get_node_or_null("HealthComponent")
 	if hc and hc.has_method("take_damage"):
-		hc.take_damage(damage)
+		hc.apply_damage(damage, {"kind": "projectile", "crit": is_crit})
 	elif enemy.has_method("take_damage"):
 		enemy.take_damage(damage)
 

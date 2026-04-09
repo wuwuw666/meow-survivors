@@ -21,6 +21,11 @@ var player_speed_mult: float = 1.0
 var current_wave: int = 0
 var is_paused: bool = false
 var is_game_over: bool = false
+var _pause_reasons: Dictionary = {}
+
+const PAUSE_REASON_UPGRADE := "upgrade_selection"
+const PAUSE_REASON_READY := "ready_phase"
+const PAUSE_REASON_GAME_OVER := "game_over"
 
 ## Tower tracking
 var placed_towers: Array = []
@@ -57,6 +62,34 @@ func set_player_max_hp(new_max: int) -> void:
 	player_max_hp = new_max
 	player_hp = min(player_hp, player_max_hp)
 
+## ---- Pause ----
+func request_pause(reason: String = "manual") -> void:
+	if reason.is_empty():
+		reason = "manual"
+	_pause_reasons[reason] = int(_pause_reasons.get(reason, 0)) + 1
+	_sync_pause_state()
+
+func release_pause(reason: String = "manual") -> void:
+	if not _pause_reasons.has(reason):
+		return
+
+	var next_count := int(_pause_reasons[reason]) - 1
+	if next_count > 0:
+		_pause_reasons[reason] = next_count
+	else:
+		_pause_reasons.erase(reason)
+	_sync_pause_state()
+
+func clear_pause_requests() -> void:
+	_pause_reasons.clear()
+	_sync_pause_state()
+
+func _sync_pause_state() -> void:
+	is_paused = not _pause_reasons.is_empty()
+	var tree := get_tree()
+	if tree:
+		tree.paused = is_paused and not is_game_over
+
 ## ---- Reset ----
 func reset_session() -> void:
 	player_hp = 20
@@ -71,6 +104,7 @@ func reset_session() -> void:
 	player_speed = 200.0
 	player_speed_mult = 1.0
 	current_wave = 0
-	is_paused = false
 	is_game_over = false
+	_pause_reasons.clear()
 	placed_towers.clear()
+	_sync_pause_state()

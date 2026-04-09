@@ -15,6 +15,7 @@ var current_hp: int
 var is_dead: bool = false
 
 signal hp_changed(current: int, max_hp: int)
+signal damage_taken(amount: int, current: int, max_hp: int, context: Dictionary)
 signal entity_died(entity: Node)
 signal player_died
 
@@ -23,6 +24,9 @@ func _ready() -> void:
 	hp_changed.emit(current_hp, max_hp)
 
 func take_damage(amount: int) -> void:
+	apply_damage(amount, {})
+
+func apply_damage(amount: int, context: Dictionary = {}) -> void:
 	if is_dead:
 		return
 	if amount <= 0:
@@ -30,6 +34,7 @@ func take_damage(amount: int) -> void:
 
 	current_hp = max(0, current_hp - amount)
 	hp_changed.emit(current_hp, max_hp)
+	damage_taken.emit(amount, current_hp, max_hp, context)
 
 	if current_hp <= 0:
 		_die()

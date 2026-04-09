@@ -158,12 +158,17 @@ func _setup_health() -> void:
 	if not hc:
 		hc = HealthComponent.new()
 		hc.name = "HealthComponent"
+		hc.max_hp = _data.hp
 		add_child(hc)
-		
-	hc.max_hp = _data.hp
+	else:
+		hc.max_hp = _data.hp
+	
+	hc.current_hp = hc.max_hp
+	hc.is_dead = false
 	hc.is_player = false
 	hc.entity_died.connect(func(_e): _on_enemy_died())
 	hc.hp_changed.connect(_on_hp_changed)
+	hc.hp_changed.emit(hc.current_hp, hc.max_hp)
 
 func _setup_collision() -> void:
 	collision_layer = ENEMY_LAYER
