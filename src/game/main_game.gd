@@ -5,6 +5,8 @@
 class_name MainGame
 extends Node2D
 
+const UpgradeDataScript = preload("res://src/data/upgrade_data.gd")
+
 # ========== 节点引用 ==========
 @onready var player: CharacterBody2D = $Player
 @onready var enemy_container: Node2D = $EnemyContainer
@@ -20,6 +22,7 @@ extends Node2D
 @onready var feedback: CombatFeedbackManager = null
 @onready var spawn_manager: SpawnManager = null
 @onready var tower_manager: TowerManager = null
+var upgrade_data: UpgradeData = null
 
 # 弹丸场景（预加载）
 const PROJECTILE_SCENE: PackedScene = preload("res://scenes/gameplay/projectile.tscn")
@@ -35,10 +38,10 @@ var _ghost_tower: ColorRect = null
 
 # Towers database
 var towers_db: Array[Dictionary] = [
-	{"key": "bow", "name": "🏹长弓", "cost": 30, "dmg": 25, "range": 350, "iv": 1.2, "type": "attack"},
-	{"key": "fish", "name": "🐟小鱼干", "cost": 10, "dmg": 12, "range": 180, "iv": 1.0, "type": "attack"},
-	{"key": "yarn", "name": "🧶毛线球", "cost": 15, "dmg": 6, "range": 150, "iv": 1.5, "type": "control"},
-	{"key": "aura", "name": "🌿猫薄荷", "cost": 20, "range": 120, "type": "aura", "buff": 0.15},
+	{"key": "bow", "name": "🏹长弓", "cost": 35, "dmg": 14, "range": 310, "iv": 1.45, "type": "attack"},
+	{"key": "fish", "name": "🐟小鱼干", "cost": 14, "dmg": 6, "range": 160, "iv": 1.20, "type": "attack"},
+	{"key": "yarn", "name": "🧶毛线球", "cost": 18, "dmg": 3, "range": 140, "iv": 1.75, "type": "control"},
+	{"key": "aura", "name": "🌿猫薄荷", "cost": 24, "range": 115, "type": "aura", "buff": 0.12},
 ]
 
 # UI refs
@@ -49,6 +52,7 @@ var xp_label: Label
 var coin_label: Label
 var wave_label: Label
 var tower_indicators: Array[Label] = []
+var tower_shop_buttons: Array[Dictionary] = []
 
 # Panels
 var upgrade_panel: PanelContainer
@@ -79,6 +83,7 @@ func _ready() -> void:
 
 	Game.reset_session()
 	_setup_components()
+	upgrade_data = UpgradeDataScript.new()
 	_load_paths_from_nodes()
 	# 设置背景点击穿透，否则 _unhandled_input 会被拦截
 	$Background.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -88,6 +93,8 @@ func _ready() -> void:
 	# 初始处于准备阶段，不自动启动波次
 	Game.request_pause(Game.PAUSE_REASON_READY)
 	_show_ready_ui()
+	if DisplayServer.get_name() == "headless":
+		_start_game_from_ready()
 	print_rich("[color=cyan][MainGame][/color] 核心系统已就绪，进入 [准备阶段]...")
 
 func _show_ready_ui() -> void:
@@ -107,9 +114,7 @@ func _show_ready_ui() -> void:
 	ui.add_child(btn)
 	
 	btn.pressed.connect(func():
-		_game_started = true
-		Game.release_pause(Game.PAUSE_REASON_READY)
-		wave_manager.enable_waves()
+		_start_game_from_ready()
 		btn.queue_free()
 	)
 	
@@ -117,6 +122,14 @@ func _show_ready_ui() -> void:
 	var tw := create_tween().set_loops()
 	tw.tween_property(btn, "modulate:a", 0.6, 0.8)
 	tw.tween_property(btn, "modulate:a", 1.0, 0.8)
+
+func _start_game_from_ready() -> void:
+	if _game_started:
+		return
+	_game_started = true
+	Game.release_pause(Game.PAUSE_REASON_READY)
+	if wave_manager:
+		wave_manager.enable_waves()
 
 func _load_paths_from_nodes() -> void:
 	if spawn_manager:
@@ -601,11 +614,12 @@ func _build_ui() -> void:
 
 	for tw in towers_db:
 		var btn := Button.new()
-		btn.text = "%s\n💰%d" % [tw.name, tw.cost]
+		btn.text = _format_tower_button_text(tw)
 		btn.custom_minimum_size = Vector2(85, 75)
 		btn.add_theme_font_size_override("font_size", 14)
 		btn.button_down.connect(_on_tower_drag_start.bind(tw))
 		shop_hbox.add_child(btn)
+		tower_shop_buttons.append({"button": btn, "data": tw})
 
 # ========== HUD update ==========
 func _update_hud() -> void:
@@ -634,6 +648,7 @@ func _update_hud() -> void:
 		xp_level_lbl.text = "⭐ Lv.%d" % Game.player_level
 
 	coin_label.text = "💰 %d" % Game.player_coins
+	_refresh_tower_shop_buttons()
 
 	# (已移除塔插槽更新)
 
@@ -675,15 +690,6 @@ func _on_player_died() -> void:
 	await get_tree().create_timer(0.8).timeout
 	_show_game_over_panel()
 
-# ========== 升级面板 ==========
-const UPGRADES: Array[Dictionary] = [
-	{"name": "⚔️ 伤害+5", "apply": "damage"},
-	{"name": "⚡ 攻速+20%", "apply": "aspd"},
-	{"name": "🎯 射程+30", "apply": "range"},
-	{"name": "❤️ 生命+40", "apply": "hp"},
-	{"name": "💨 移速+15%", "apply": "speed"},
-]
-
 func _show_upgrade_panel() -> void:
 	if upgrade_panel == null:
 		upgrade_panel = PanelContainer.new()
@@ -720,18 +726,31 @@ func _show_upgrade_panel() -> void:
 
 	var hbox := HBoxContainer.new()
 	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	hbox.add_theme_constant_override("separation", 14)
 	vbox.add_child(hbox)
 
-	var opts := UPGRADES.duplicate()
-	opts.shuffle()
-	opts.resize(3)
+	var opts: Array[Dictionary] = []
+	if upgrade_data:
+		opts = upgrade_data.get_candidates(max(Game.current_wave, 1), 3)
+	if opts.is_empty():
+		opts = [{
+			"name": "锋利猫爪",
+			"desc": "主角补刀更疼，更容易清掉漏怪（伤害 +5）",
+			"rarity": "Common",
+			"apply": "hero_damage_flat",
+			"value": 5
+		}]
 
 	for opt in opts:
 		var btn := Button.new()
-		btn.text = opt.name
-		btn.custom_minimum_size = Vector2(200, 90)
-		btn.add_theme_font_size_override("font_size", 18)
-		btn.pressed.connect(_select_upgrade.bind(opt.apply))
+		btn.text = "%s\n%s" % [String(opt.get("name", "升级")), String(opt.get("desc", ""))]
+		btn.custom_minimum_size = Vector2(210, 120)
+		btn.add_theme_font_size_override("font_size", 16)
+		btn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		btn.add_theme_stylebox_override("normal", _make_upgrade_card_style(String(opt.get("rarity", "Common")), false))
+		btn.add_theme_stylebox_override("hover", _make_upgrade_card_style(String(opt.get("rarity", "Common")), true))
+		btn.pressed.connect(_select_upgrade.bind(opt))
 		hbox.add_child(btn)
 
 	# 弹入动画
@@ -743,29 +762,11 @@ func _show_upgrade_panel() -> void:
 	tw.tween_property(upgrade_panel, "scale", Vector2.ONE, 0.2).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
 	tw.parallel().tween_property(upgrade_panel, "modulate:a", 1.0, 0.15)
 
-func _select_upgrade(type_name: String) -> void:
-	match type_name:
-		"damage":
-			Game.player_damage += 5
-			if auto_attack:
-				auto_attack.base_damage = Game.player_damage
-		"aspd":
-			if auto_attack:
-				auto_attack.set_attack_speed_bonus(0.20)
-		"range":
-			Game.player_range += 30
-			if auto_attack:
-				auto_attack.set_range_bonus(Game.player_range - 150.0)
-		"hp":
-			Game.set_player_max_hp(Game.player_max_hp + 40)
-			Game.heal_player(40)
-			if hero_health:
-				hero_health.max_hp = Game.player_max_hp
-				hero_health.heal(40)
-		"speed":
-			Game.player_speed_mult *= 1.15
-			if movement:
-				movement.base_speed = 200.0 * Game.player_speed_mult
+func _select_upgrade(upgrade: Dictionary) -> void:
+	var applied: bool = _apply_upgrade(upgrade)
+	if applied:
+		Game.record_upgrade(upgrade)
+		_show_floating_text(player.global_position + Vector2(0, -60), "已升级: %s" % String(upgrade.get("name", "升级")), Color(0.8, 1.0, 0.65))
 
 	# 收起动画
 	var tw := create_tween()
@@ -780,9 +781,50 @@ func _select_upgrade(type_name: String) -> void:
 			Game.release_pause(Game.PAUSE_REASON_UPGRADE)
 	)
 
+func _apply_upgrade(upgrade: Dictionary) -> bool:
+	var apply_key: String = String(upgrade.get("apply", ""))
+	var value: Variant = upgrade.get("value")
+
+	match apply_key:
+		"hero_damage_flat":
+			Game.player_damage += int(value)
+			if auto_attack:
+				auto_attack.base_damage = Game.player_damage
+			return true
+		"hero_attack_speed_pct":
+			Game.player_attack_speed_bonus += float(value)
+			if auto_attack:
+				auto_attack.set_attack_speed_bonus(Game.player_attack_speed_bonus)
+			return true
+		"hero_range_flat":
+			Game.player_range += float(value)
+			if auto_attack:
+				auto_attack.set_range_bonus(Game.player_range - auto_attack.base_range)
+			return true
+		"hero_hp_flat":
+			Game.set_player_max_hp(Game.player_max_hp + int(value))
+			Game.heal_player(int(value))
+			if hero_health:
+				hero_health.max_hp = Game.player_max_hp
+				hero_health.heal(int(value))
+			return true
+		"hero_speed_pct":
+			Game.player_speed_mult *= 1.0 + float(value)
+			if movement:
+				movement.base_speed = Game.player_speed * Game.player_speed_mult
+			return true
+		"tower_damage_pct", "tower_attack_speed_pct", "tower_range_pct", "tower_cost_pct", "aura_buff_flat", "fish_split_targets", "yarn_splash_slow_unlock", "tower_specialize_fish", "tower_specialize_yarn":
+			if tower_manager:
+				return tower_manager.apply_upgrade_effect(apply_key, value)
+
+	return false
+
 # ========== 塔位拖放系统 ==========
 func _on_tower_drag_start(tw_data: Dictionary) -> void:
-	if Game.player_coins < tw_data.cost:
+	var effective_cost := int(tw_data.get("cost", 0))
+	if tower_manager:
+		effective_cost = tower_manager.get_effective_cost(tw_data)
+	if Game.player_coins < effective_cost:
 		_show_floating_text(get_global_mouse_position(), "金币不足！", Color(1, 0.2, 0.2))
 		add_screen_shake(2.0)
 		return
@@ -871,3 +913,55 @@ func _show_game_over_panel() -> void:
 	vbox.add_child(stats)
 
 # ========== Helper ==========
+func _make_upgrade_card_style(rarity: String, is_hovered: bool) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.corner_radius_top_left = 12
+	style.corner_radius_top_right = 12
+	style.corner_radius_bottom_right = 12
+	style.corner_radius_bottom_left = 12
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+
+	match rarity:
+		"Rare":
+			style.bg_color = Color(0.12, 0.18, 0.34, 0.96)
+			style.border_color = Color(0.45, 0.72, 1.0)
+		"Epic":
+			style.bg_color = Color(0.20, 0.12, 0.34, 0.96)
+			style.border_color = Color(0.82, 0.56, 1.0)
+		_:
+			style.bg_color = Color(0.20, 0.20, 0.24, 0.96)
+			style.border_color = Color(0.72, 0.72, 0.72)
+
+	if is_hovered:
+		style.border_width_left = 3
+		style.border_width_top = 3
+		style.border_width_right = 3
+		style.border_width_bottom = 3
+		style.expand_margin_left = 2
+		style.expand_margin_top = 2
+		style.expand_margin_right = 2
+		style.expand_margin_bottom = 2
+
+	return style
+
+func _format_tower_button_text(tw_data: Dictionary) -> String:
+	var effective_cost := int(tw_data.get("cost", 0))
+	if tower_manager:
+		effective_cost = tower_manager.get_effective_cost(tw_data)
+	return "%s\n💰%d" % [String(tw_data.get("name", "塔")), effective_cost]
+
+func _refresh_tower_shop_buttons() -> void:
+	for entry in tower_shop_buttons:
+		var btn := entry.get("button") as Button
+		var tw_data := entry.get("data", {}) as Dictionary
+		if btn == null:
+			continue
+		btn.text = _format_tower_button_text(tw_data)
+		var effective_cost := int(tw_data.get("cost", 0))
+		if tower_manager:
+			effective_cost = tower_manager.get_effective_cost(tw_data)
+		var affordable := Game.player_coins >= effective_cost
+		btn.modulate = Color(1, 1, 1, 1) if affordable else Color(0.75, 0.75, 0.75, 0.85)

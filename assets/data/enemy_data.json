@@ -1,7 +1,7 @@
 {
-  "normal_a": { "hp": 30, "speed": 90.0, "damage": 10, "body_size": 14.0, "coin": 2, "xp": 3 },
-  "normal_b": { "hp": 60, "speed": 60.0, "damage": 15, "body_size": 18.0, "coin": 2, "xp": 3 },
-  "normal_c": { "hp": 120, "speed": 40.0, "damage": 20, "body_size": 22.0, "coin": 3, "xp": 5 },
-  "elite":    { "hp": 300, "speed": 55.0, "damage": 25, "body_size": 24.0, "coin": 8, "xp": 10 },
-  "boss":     { "hp": 1000, "speed": 35.0, "damage": 40, "body_size": 48.0, "coin": 25, "xp": 50 }
+  "normal_a": { "role": "runner",  "hp": 42,  "speed": 94.0, "damage": 10, "body_size": 13.0, "coin": 2, "xp": 3 },
+  "normal_b": { "role": "basic",   "hp": 88,  "speed": 68.0, "damage": 14, "body_size": 18.0, "coin": 2, "xp": 3 },
+  "normal_c": { "role": "tank",    "hp": 180, "speed": 46.0, "damage": 20, "body_size": 23.0, "coin": 3, "xp": 5 },
+  "elite":    { "role": "bruiser", "hp": 360, "speed": 58.0, "damage": 24, "body_size": 25.0, "coin": 8, "xp": 10 },
+  "boss":     { "role": "boss",    "hp": 1300,"speed": 34.0, "damage": 40, "body_size": 48.0, "coin": 25, "xp": 50 }
 }
