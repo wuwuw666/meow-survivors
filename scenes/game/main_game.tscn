@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://bljkaq4mnij5r"]
 
 [ext_resource type="Script" uid="uid://dnhvtyqe0g6e8" path="res://src/game/main_game.gd" id="main"]
+[ext_resource type="Script" path="res://src/game/tower_slot.gd" id="2_slot"]
 
 [sub_resource type="CapsuleShape2D" id="cap_hero"]
 radius = 16.0
@@ -46,6 +47,28 @@ shape = SubResource("cap_hero")
 
 [node name="PathRight" type="Path2D" parent="Paths" unique_id=1358560842]
 curve = SubResource("Curve2D_right")
+
+[node name="TowerSlots" type="Node2D" parent="." unique_id=826115274]
+
+[node name="Slot_01" type="Node2D" parent="TowerSlots" unique_id=20241001]
+script = ExtResource("2_slot")
+position = Vector2(296, 172)
+
+[node name="Slot_02" type="Node2D" parent="TowerSlots" unique_id=20241002]
+script = ExtResource("2_slot")
+position = Vector2(958, 156)
+
+[node name="Slot_03" type="Node2D" parent="TowerSlots" unique_id=20241003]
+script = ExtResource("2_slot")
+position = Vector2(252, 520)
+
+[node name="Slot_04" type="Node2D" parent="TowerSlots" unique_id=20241004]
+script = ExtResource("2_slot")
+position = Vector2(980, 540)
+
+[node name="Slot_05" type="Node2D" parent="TowerSlots" unique_id=20241005]
+script = ExtResource("2_slot")
+position = Vector2(640, 150)
 
 [node name="UILayer" type="CanvasLayer" parent="." unique_id=1654935724]
 layer = 10
