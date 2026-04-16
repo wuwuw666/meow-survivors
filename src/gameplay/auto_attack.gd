@@ -137,7 +137,8 @@ func _calculate_damage(_target: Node) -> int:
 	# 应用光环塔加成
 	for tw in Game.placed_towers:
 		if tw.has("type") and tw.type == "aura":
-			base = int(ceil(float(base) * 1.15))
+			var aura_buff := float(tw.get("buff", 0.15))
+			base = int(ceil(float(base) * (1.0 + aura_buff)))
 	return max(1, base)
 
 # ---------- 公开 API: 升级系统调用 ----------
