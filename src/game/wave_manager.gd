@@ -1,6 +1,6 @@
 ## 波次控制器 (Wave Manager)
 ## GDD: design/gdd/wave-system.md
-## 负责波次的推进逻辑和生成敌人的频率、类型决策，不负责实体生成与位置（这由调用者执行）
+## 负责波次推进、刷怪节奏与敌人类型决策，不直接负责实体实例化
 class_name WaveManager
 extends Node
 
@@ -16,6 +16,8 @@ var _spawn_interval: float = 0.35
 var _spawn_count: int = 0
 var _total_to_spawn: int = 0
 var _boss_spawned: bool = false
+var _elite_spawn_target: int = 0
+var _elite_spawn_count: int = 0
 var _enabled: bool = false
 var _main_game: Node = null
 
@@ -26,7 +28,6 @@ func enable_waves() -> void:
 	_enabled = true
 	_wave_cooldown = 1.0
 
-## 允许外部传入 main_game 方便获取存活怪物数量
 func bind_main_game(main_game: Node) -> void:
 	_main_game = main_game
 
@@ -36,27 +37,30 @@ func _process(delta: float) -> void:
 
 	if not is_wave_active:
 		_wave_cooldown -= delta
-		if _wave_cooldown <= 0:
+		if _wave_cooldown <= 0.0:
 			_start_wave(current_wave)
-			
-	if is_wave_active:
-		_spawn_timer -= delta
-		if _spawn_timer <= 0 and _spawn_count < _total_to_spawn:
-			_spawn_timer = _spawn_interval
-			_request_spawn()
-			_spawn_count += 1
-			
-		# 检查当前波次是否清理完毕
-		if _spawn_count >= _total_to_spawn:
-			var alive = 0
-			if _main_game and _main_game.has_method("_get_alive_enemy_count"):
-				alive = _main_game._get_alive_enemy_count()
-			
-			if alive == 0:
-				is_wave_active = false
-				if current_wave % 10 != 0:
-					_wave_cooldown = 2.5
-				current_wave += 1
+
+	if not is_wave_active:
+		return
+
+	_spawn_timer -= delta
+	if _spawn_timer <= 0.0 and _spawn_count < _total_to_spawn:
+		_spawn_timer = _spawn_interval
+		_request_spawn()
+		_spawn_count += 1
+
+	if _spawn_count < _total_to_spawn:
+		return
+
+	var alive: int = 0
+	if _main_game and _main_game.has_method("_get_alive_enemy_count"):
+		alive = _main_game._get_alive_enemy_count()
+
+	if alive == 0:
+		is_wave_active = false
+		if current_wave % 10 != 0:
+			_wave_cooldown = 2.5
+		current_wave += 1
 
 func _start_wave(wave_num: int) -> void:
 	current_wave = wave_num
@@ -67,35 +71,47 @@ func _start_wave(wave_num: int) -> void:
 		_boss_spawned = true
 		_total_to_spawn = 3
 		_spawn_interval = 3.5
+		_elite_spawn_target = 0
 	elif wave_num <= 3:
 		_total_to_spawn = 15 + wave_num * 5
-		_spawn_interval = 1.8 
+		_spawn_interval = 1.8
+		_elite_spawn_target = 0
 	elif wave_num <= 6:
 		_total_to_spawn = 25 + wave_num * 4
 		_spawn_interval = 1.5
+		_elite_spawn_target = 1
 	elif wave_num <= 9:
 		_total_to_spawn = 35 + wave_num * 3
 		_spawn_interval = 1.2
+		_elite_spawn_target = 1
 	else:
 		_total_to_spawn = 50 + wave_num * 2
 		_spawn_interval = max(0.6, 1.2 - wave_num * 0.02)
+		_elite_spawn_target = 1
 
 	_spawn_count = 0
-	_spawn_timer = 0.5 # 开场半秒后开始刷
-	
+	_elite_spawn_count = 0
+	_spawn_timer = 0.5
 	wave_started.emit(wave_num)
 
 func _request_spawn() -> void:
 	if current_wave == 10 and _boss_spawned and _spawn_count == 0:
 		spawn_requested.emit("boss")
 		return
-		
+
+	if _elite_spawn_count < _elite_spawn_target:
+		var elite_trigger_index: int = maxi(2, int(floor(float(_total_to_spawn) * 0.4)))
+		if _spawn_count == elite_trigger_index:
+			_elite_spawn_count += 1
+			spawn_requested.emit("elite")
+			return
+
 	var types: Array[String] = ["normal_a", "normal_b", "normal_c"]
 	var weights: Array[float] = [0.55, 0.32, 0.13]
-	if current_wave >= 4:
-		weights = [0.38, 0.38, 0.24]
-	elif current_wave >= 7:
+	if current_wave >= 7:
 		weights = [0.28, 0.42, 0.30]
+	elif current_wave >= 4:
+		weights = [0.38, 0.38, 0.24]
 
 	var r: float = randf()
 	var cumulative: float = 0.0
