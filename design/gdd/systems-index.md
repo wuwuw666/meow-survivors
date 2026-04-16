@@ -2,7 +2,7 @@
 
 > **Status**: Draft
 > **Created**: 2026-04-01
-> **Last Updated**: 2026-04-10
+> **Last Updated**: 2026-04-15
 > **Current Direction**: C-Tangy hybrid progression
 
 ---
@@ -91,19 +91,19 @@
 | 9 | Enemy System | Gameplay | MVP | Approved | `design/gdd/enemy-system.md` |
 | 10 | Enemy Spawn System | Gameplay | MVP | Approved | `design/gdd/enemy-spawn-system.md` |
 | 11 | Wave System | Gameplay | MVP | Approved | `design/gdd/wave-system.md` |
-| 12 | Tower System | Gameplay | MVP | Approved | `design/gdd/tower-system.md` |
-| 13 | Tower Placement System | Gameplay | MVP | Approved | `design/gdd/tower-placement-system.md` |
+| 12 | Tower System | Gameplay | MVP | Revised | `design/gdd/tower-system.md` |
+| 13 | Tower Placement System | Gameplay | MVP | Revised | `design/gdd/tower-placement-system.md` |
 | 14 | Auto Attack System | Gameplay | MVP | Approved | `design/gdd/auto-attack-system.md` |
 | 15 | Coin System | Economy | MVP | Approved | `design/gdd/coin-system.md` |
 | 16 | XP System | Progression | MVP | Revised | `design/gdd/xp-system.md` |
 | 17 | Upgrade Pool System | Progression | MVP | Revised | `design/gdd/upgrade-pool-system.md` |
 | 18 | Upgrade Selection System | Progression | MVP | Revised | `design/gdd/upgrade-selection-system.md` |
 | 19 | Tower Mod System | Progression | MVP | In Design | `design/gdd/tower-mod-system.md` |
-| 20 | UI System | UI | MVP | Approved | `design/gdd/ui-system.md` |
-| 21 | Settlement System | UI / Meta | MVP | Designed | `design/gdd/settlement-system.md` |
-| 22 | Save System | Persistence | v1.0 | Not Started | - |
-| 23 | Unlock System | Progression | v1.0 | Not Started | - |
-| 24 | Tower Meta Progression System | Progression | v1.0 | Not Started | - |
+| 20 | UI System | UI | MVP | Revised | `design/gdd/ui-system.md` |
+| 21 | Settlement System | UI / Meta | MVP | Revised | `design/gdd/settlement-system.md` |
+| 22 | Save System | Persistence | v1.0 | In Design | `design/gdd/save-system.md` |
+| 23 | Unlock System | Progression | v1.0 | In Design | `design/gdd/unlock-system.md` |
+| 24 | Tower Meta Progression System | Progression | v1.0 | In Design | `design/gdd/tower-meta-progression-system.md` |
 
 ---
 
@@ -136,7 +136,7 @@ Purpose:
 ### Tower Meta Progression
 
 - `settlement-system`
-- `tower-meta-progression-system`（未来）
+- `tower-meta-progression-system`
 - `save-system`（未来）
 
 Purpose:
@@ -163,6 +163,10 @@ Purpose:
 - [x] 将 XP 系统改为只服务角色局内成长
 - [x] 将升级选择与升级池改为角色专属
 - [x] 新增 `tower-mod-system.md`
-- [ ] 重写 `settlement-system.md` 以接入塔局外成长资源
-- [ ] 设计 `tower-meta-progression-system.md`
-- [ ] 在 UI 中明确区分角色升级、塔改造和结算奖励
+- [x] 重写 `settlement-system.md` 以接入塔局外成长资源
+- [x] 设计 `tower-meta-progression-system.md`
+- [x] 在 UI 中明确区分角色升级、塔改造和结算奖励
+- [x] 将塔系统与塔位交互改为兼容塔改造 + 局外成长模型
+- [x] 补 `save-system` 与塔局外成长的数据落盘边界
+- [x] 补 `unlock-system` 作为长期解锁状态查询层
+- [x] 补 UI 对局外成长界面的入口与回流路径
