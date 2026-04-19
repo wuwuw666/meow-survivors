@@ -2,7 +2,7 @@
 
 > **Status**: In Design
 > **Author**: [user + agents]
-> **Last Updated**: 2026-04-01
+> **Last Updated**: 2026-04-15
 > **Implements Pillar**: 简化操作（Anti-Pillar: 不做复杂操作）
 
 ---
@@ -118,7 +118,8 @@ Normal
 | **移动系统** | 输入 → 移动 | `movement_direction: Vector2` | 每帧传递方向向量，移动系统计算位移 |
 | **塔位放置系统** | 输入 → 塔位 | `tower_place_signal: bool + slot_id` | 点击塔位触发放置流程 |
 | **UI系统** | 输入 → UI | `ui_click_signal: bool + button_id` | UI按钮点击交互 |
-| **波次系统** | 波次 → 输入 | `upgrade_triggered: bool` | 波次结束触发升级面板 → 输入切换到 UI_Open 状态 |
+| **经验系统** | XP → 输入 | `level_up_requested: bool` | 角色升级触发升级面板 → 输入切换到 UI_Open 状态 |
+| **塔改造系统** | 改造 → 输入 | `mod_offer_triggered: bool` | 精英 / Boss 奖励触发改造面板 → 输入切换到 UI_Open 状态 |
 | **结算系统** | 结算 → 输入 | `game_paused: bool` | 结算触发暂停状态 |
 
 ---

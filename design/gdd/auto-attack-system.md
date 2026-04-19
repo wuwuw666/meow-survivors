@@ -274,8 +274,8 @@ MVP 典型值:
 | EC-04 | **攻击频率极高导致弹丸叠帧** | `attack_cooldown < projectile_flight_time` | 允许——弹丸是独立节点，每颗各自飞行。只要弹丸节点有对象池或自动清理，不会累积无限弹丸 |
 | EC-05 | **游戏暂停后恢复攻击** | 冷却计时暂停，恢复后继续 | `_process(delta)` 在暂停时 delta=0，计时器不增加，自动正确恢复 |
 | EC-06 | **伤害计算系统返回 0** | 目标护甲极高导致伤害为 0 | 伤害系统已保证最小伤害为 1。但防御性检查 `if damage > 0:` 确保 0 伤害不发信号 |
-| EC-07 | **玩家被升级系统选中增加攻击力** | 升级面板选择 "+20% 伤害" | 升级系统调用 `apply_damage_bonus(0.20)` → `damage_multiplier *= 1.20` |
-| EC-08 | **升级系统减少攻击冷却** | 升级选择 "+30% 攻击速度" | `attack_cooldown_sec = base_cooldown × (1 - 0.30)`，受 0.1s 下限保护 |
+| EC-07 | **玩家选择角色直战升级增加攻击力** | 角色升级面板选择 "+20% 伤害" | 角色升级系统调用 `apply_damage_bonus(0.20)` → `damage_multiplier *= 1.20` |
+| EC-08 | **角色升级减少攻击冷却** | 角色升级选择 "+30% 攻击速度" | `attack_cooldown_sec = base_cooldown × (1 - 0.30)`，受 0.1s 下限保护 |
 | EC-09 | **玩家死亡后自动攻击** | 玩家 HP 归零 | 波次系统发出 `game_over`，自动攻击系统停止所有计时和发射。已发射的弹丸自然飞行直到命中或消失 |
 | EC-10 | **多弹丸同时命中同一目标** | 多弹丸升级（v1.0） | 每次命中独立调用 `_on_projectile_hit`，分别计算伤害。生命值系统的 `is_dead` 检查防止重复死亡信号 |
 | EC-11 | **攻击数据尚未初始化就触发冷却** | 系统启动时 `base_damage` 未设置 | 在 `_ready()` 中设置默认 `base_damage = 10`。若被 override 修改则以后续设置为准 |
@@ -297,7 +297,7 @@ MVP 典型值:
 
 | 系统 | 依赖类型 | 接口 | 说明 |
 |------|---------|------|------|
-| **升级选择系统** | 软依赖 | `set_attack_data()`, `apply_damage_bonus()`, `apply_attack_speed_bonus()` | 升级修改攻击参数 |
+| **升级选择系统** | 软依赖 | `set_attack_data()`, `apply_damage_bonus()`, `apply_attack_speed_bonus()` | 角色升级修改自动攻击参数 |
 | **UI系统** | 软依赖 | 信号 `projectile_hit_enemy(target, damage, is_crit)` | 伤害数字飘字显示 |
 | **音频系统** | 软依赖 | 信号 `projectile_fired`, `projectile_hit` | 发射/命中音效 |
 
@@ -417,8 +417,8 @@ func get_current_dps() -> float
 | AC-AA-04 | 伤害计算链路 | 攻击命中敌人，检查 HP 变化 | 敌人 HP 下降值 = DamageSystem.calculate_damage() 返回值 |
 | AC-AA-05 | 伤害数字显示 | 命中时观察 UI 飘字 | 红色伤害数字出现从敌人头顶飘出，数值与计算伤害一致 |
 | AC-AA-06 | 暴击触发统计 | 设 crit_chance = 1.0，攻击 10 次 | 10 次全部暴击，黄色大数字暴击飘字 10 次 |
-| AC-AA-07 | 升级修改伤害 | 调用 `apply_damage_bonus(0.50)`，攻击敌人 | 伤害从 base 10 变为 15，DPS 提升 50% |
-| AC-AA-08 | 升级修改攻击速度 | 调用 `set_attack_speed_bonus(0.50)`，测量 10 次发射间隔 | 平均间隔 ≈ 0.5s（vs 原 1.0s），误差 < 0.05s |
+| AC-AA-07 | 角色升级修改伤害 | 调用 `apply_damage_bonus(0.50)`，攻击敌人 | 伤害从 base 10 变为 15，DPS 提升 50% |
+| AC-AA-08 | 角色升级修改攻击速度 | 调用 `set_attack_speed_bonus(0.50)`，测量 10 次发射间隔 | 平均间隔 ≈ 0.5s（vs 原 1.0s），误差 < 0.05s |
 | AC-AA-09 | projectile_hit_enemy 信号 | 监听信号 | 每次弹丸命中敌人时发出恰好 1 次信号，参数为 (enemy_node, damage_value, is_crit) |
 
 ### 边界测试
@@ -446,7 +446,7 @@ func get_current_dps() -> float
 |----|-------|---------|----------|
 | AC-AA-I01 | 目标系统集成 | 猫咪启动后自动攻击射程内敌人 | 弹丸准确飞向最近敌人，命中伤害正确 |
 | AC-AA-I02 | 伤害系统集成 | 弹丸命中后检查敌人 HP 变化 | 伤害值 = damage_system.calculate_damage() 返回，HP 下降对应值 |
-| AC-AA-I03 | 升级系统集成 | 通过升级面板选择"+30% 伤害" | 后续攻击伤害提升约 30%（向下取整差异可能 ±1） |
+| AC-AA-I03 | 角色升级系统集成 | 通过角色升级面板选择"+30% 伤害" | 后续攻击伤害提升约 30%（向下取整差异可能 ±1） |
 | AC-AA-I04 | UI 伤害数字集成 | 弹丸命中敌人 | UI 飘字出现且数值匹配，暴击时有黄色特效 |
 
 ---

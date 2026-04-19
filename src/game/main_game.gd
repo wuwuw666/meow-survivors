@@ -23,26 +23,29 @@ const UpgradeDataScript = preload("res://src/data/upgrade_data.gd")
 @onready var spawn_manager: SpawnManager = null
 @onready var tower_manager: TowerManager = null
 var upgrade_data: UpgradeData = null
+@onready var tower_mod_manager: TowerModManager = null
 
 # 弹丸场景（预加载）
 const PROJECTILE_SCENE: PackedScene = preload("res://scenes/gameplay/projectile.tscn")
+const COMBAT_FEEDBACK_MANAGER_SCRIPT := preload("res://src/game/combat_feedback_manager.gd")
+const SPAWN_MANAGER_SCRIPT := preload("res://src/game/spawn_manager.gd")
+const TOWER_MANAGER_SCRIPT := preload("res://src/game/tower_manager.gd")
+const TOWER_DATA_SCRIPT := preload("res://src/data/tower_data.gd")
+const TOWER_MOD_MANAGER_SCRIPT := preload("res://src/game/tower_mod_manager.gd")
 
 # Wave state
 var wave_manager: WaveManager = null
 var _game_started: bool = false # 准备阶段标志
 
-# Tower Dragging
-var _is_dragging_tower: bool = false
-var _drag_tower_data: Dictionary = {}
-var _ghost_tower: ColorRect = null
-
-# Towers database
-var towers_db: Array[Dictionary] = [
-	{"key": "bow", "name": "🏹长弓", "cost": 35, "dmg": 14, "range": 310, "iv": 1.45, "type": "attack"},
-	{"key": "fish", "name": "🐟小鱼干", "cost": 14, "dmg": 6, "range": 160, "iv": 1.20, "type": "attack"},
-	{"key": "yarn", "name": "🧶毛线球", "cost": 18, "dmg": 3, "range": 140, "iv": 1.75, "type": "control"},
-	{"key": "aura", "name": "🌿猫薄荷", "cost": 24, "range": 115, "type": "aura", "buff": 0.12},
-]
+var _tower_data = null
+var _selected_slot_id: int = -1
+var _hovered_slot_id: int = -1
+var _slot_marker_nodes: Dictionary = {}
+var _tower_shop_buttons: Dictionary = {}
+var _preview_tower_key: String = ""
+var _range_preview: Polygon2D = null
+var _mod_target_slot_ids: Array[int] = []
+var _pending_elite_mod_offers: int = 0
 
 # UI refs
 var hp_bar: ProgressBar
@@ -56,6 +59,8 @@ var tower_shop_buttons: Array[Dictionary] = []
 
 # Panels
 var upgrade_panel: PanelContainer
+var tower_info_panel: PanelContainer
+var tower_mod_offer_panel: PanelContainer
 var game_over_panel: PanelContainer
 
 # 屏幕震动
@@ -71,6 +76,7 @@ const ENEMY_SCENE_PATH: String = "res://scenes/characters/enemy_base.tscn"
 # ========== _ready ==========
 func _ready() -> void:
 	# 注册组，供弹丸系统查找父节点
+	process_mode = Node.PROCESS_MODE_WHEN_PAUSED
 	add_to_group("main_game")
 	player.add_to_group("player")
 	if ui == null:
@@ -84,7 +90,9 @@ func _ready() -> void:
 	Game.reset_session()
 	_setup_components()
 	upgrade_data = UpgradeDataScript.new()
+	_setup_tower_data()
 	_load_paths_from_nodes()
+	_load_tower_slots()
 	# 设置背景点击穿透，否则 _unhandled_input 会被拦截
 	$Background.mouse_filter = Control.MOUSE_FILTER_PASS
 	_build_ui()
@@ -135,6 +143,17 @@ func _load_paths_from_nodes() -> void:
 	if spawn_manager:
 		spawn_manager.load_paths_from_node(get_node_or_null("Paths") as Node2D)
 
+func _setup_tower_data() -> void:
+	_tower_data = TOWER_DATA_SCRIPT.new()
+	if tower_manager:
+		tower_manager.bind_tower_data(_tower_data)
+
+func _load_tower_slots() -> void:
+	if tower_manager:
+		tower_manager.load_slots_from_node(get_node_or_null("TowerSlots"))
+		_build_slot_markers()
+		_ensure_range_preview()
+
 func _setup_components() -> void:
 	# Wave Manager
 	wave_manager = WaveManager.new()
@@ -183,12 +202,12 @@ func _setup_components() -> void:
 	auto_attack.projectile_scene = PROJECTILE_SCENE
 	player.add_child(auto_attack)
 
-	feedback = CombatFeedbackManager.new()
+	feedback = COMBAT_FEEDBACK_MANAGER_SCRIPT.new()
 	feedback.name = "CombatFeedbackManager"
 	add_child(feedback)
 	feedback.bind_refs(player, damage_container, effect_container, $Camera2D)
 
-	spawn_manager = SpawnManager.new()
+	spawn_manager = SPAWN_MANAGER_SCRIPT.new()
 	spawn_manager.name = "SpawnManager"
 	add_child(spawn_manager)
 	spawn_manager.bind_host(enemy_container, ENEMY_SCENE_PATH)
@@ -196,11 +215,16 @@ func _setup_components() -> void:
 	spawn_manager.enemy_died.connect(_on_enemy_died_wrapper)
 	spawn_manager.enemy_damage_taken.connect(_on_enemy_damage_taken)
 
-	tower_manager = TowerManager.new()
+	tower_manager = TOWER_MANAGER_SCRIPT.new()
 	tower_manager.name = "TowerManager"
 	add_child(tower_manager)
 	tower_manager.bind_host(self, PROJECTILE_SCENE)
 	tower_manager.tower_placed.connect(_on_tower_placed)
+
+	tower_mod_manager = TOWER_MOD_MANAGER_SCRIPT.new()
+	tower_mod_manager.name = "TowerModManager"
+	add_child(tower_mod_manager)
+	tower_mod_manager.mod_applied.connect(_on_tower_mod_applied)
 
 func _setup_signals() -> void:
 	if hero_health:
@@ -216,22 +240,32 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_tree().reload_current_scene()
 		return
 
-	if Game.is_paused:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
+		if tower_mod_offer_panel and tower_mod_offer_panel.visible:
+			_close_tower_mod_offer_flow()
+			_show_floating_text(player.global_position + Vector2(0, -72), "已取消这次塔改造选择", Color(0.9, 0.9, 1.0))
+			return
+		if _is_waiting_for_mod_target():
+			_close_tower_mod_offer_flow()
+			_show_floating_text(player.global_position + Vector2(0, -72), "已取消这次塔改造装备", Color(0.9, 0.9, 1.0))
+			return
+
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_M:
+		if not Game.is_paused:
+			_open_debug_tower_mod_offer()
 		return
 
-	if event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		if _is_dragging_tower:
-			var pos = get_global_mouse_position()
-			if _can_place_tower_at(pos):
-				_place_tower(pos, _drag_tower_data)
-			else:
-				_show_floating_text(pos, "位置被占用", Color(1, 0, 0))
-				add_screen_shake(2.0)
-			
-			if _ghost_tower:
-				_ghost_tower.queue_free()
-				_ghost_tower = null
-			_is_dragging_tower = false
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		var slot_id: int = tower_manager.find_slot_id_at_position(get_global_mouse_position())
+		if slot_id != -1:
+			if _is_waiting_for_mod_target():
+				_try_apply_pending_mod(slot_id)
+			elif not Game.is_paused:
+				_select_tower_slot(slot_id)
+			return
+
+	if Game.is_paused:
+		return
 
 func _process(delta: float) -> void:
 	if Game.is_game_over:
@@ -254,9 +288,9 @@ func _process(delta: float) -> void:
 		_process_effects(delta)
 
 	# 波次由 WaveManager 独立接管
-
-	if _is_dragging_tower and _ghost_tower != null:
-		_ghost_tower.global_position = get_global_mouse_position() - Vector2(22, 22)
+	_try_open_pending_tower_mod_offer()
+	_update_hovered_slot()
+	_update_range_preview()
 		
 	# 屏幕震动更新
 	_update_screen_shake(delta)
@@ -300,7 +334,9 @@ func _show_wave_banner(num: int) -> void:
 
 func _on_spawn_requested(enemy_type: String) -> void:
 	if spawn_manager:
-		spawn_manager.spawn_enemy(enemy_type)
+		var spawned_enemy = spawn_manager.spawn_enemy(enemy_type)
+		if enemy_type == "elite" and is_instance_valid(spawned_enemy):
+			_show_floating_text(spawned_enemy.global_position + Vector2(0, -26), "精英来袭！", Color(1.0, 0.7, 0.3))
 
 func _on_enemy_reached_base(enemy: Node) -> void:
 	if not is_instance_valid(enemy):
@@ -468,6 +504,7 @@ func _on_enemy_died_wrapper(enemy: Node) -> void:
 	if not is_instance_valid(enemy):
 		return
 	var enemy_data: Dictionary = (enemy as EnemyBase)._data if enemy is EnemyBase else {}
+	var enemy_type: String = (enemy as EnemyBase).enemy_type if enemy is EnemyBase else ""
 	var coin_val := int(enemy_data.get("coin", 2))
 	var xp_val := int(enemy_data.get("xp", 3))
 
@@ -485,6 +522,9 @@ func _on_enemy_died_wrapper(enemy: Node) -> void:
 
 	# 小屏幕震动
 	add_screen_shake(3.0)
+
+	if enemy_type == "elite":
+		_queue_elite_tower_mod_offer(enemy.global_position)
 
 func _calc_xp_needed(level: int) -> int:
 	return ceil(10.0 * pow(level, 0.9))
@@ -608,18 +648,22 @@ func _build_ui() -> void:
 	shop_margin.add_child(shop_hbox)
 
 	var t_lbl := Label.new()
-	t_lbl.text = "拖拽建塔 👉 "
+	t_lbl.text = "先点塔位，再建塔 👉 "
 	t_lbl.add_theme_font_size_override("font_size", 16)
 	shop_hbox.add_child(t_lbl)
 
-	for tw in towers_db:
+	for tw in _tower_data.get_all_towers():
 		var btn := Button.new()
 		btn.text = _format_tower_button_text(tw)
 		btn.custom_minimum_size = Vector2(85, 75)
 		btn.add_theme_font_size_override("font_size", 14)
-		btn.button_down.connect(_on_tower_drag_start.bind(tw))
+		var tower_key := String(tw.get("key", ""))
+		btn.pressed.connect(_on_build_tower_button_pressed.bind(tower_key))
+		btn.mouse_entered.connect(_on_shop_button_hovered.bind(tower_key))
+		btn.mouse_exited.connect(_on_shop_button_unhovered.bind(tower_key))
 		shop_hbox.add_child(btn)
 		tower_shop_buttons.append({"button": btn, "data": tw})
+		_tower_shop_buttons[tower_key] = btn
 
 # ========== HUD update ==========
 func _update_hud() -> void:
@@ -819,37 +863,472 @@ func _apply_upgrade(upgrade: Dictionary) -> bool:
 
 	return false
 
-# ========== 塔位拖放系统 ==========
-func _on_tower_drag_start(tw_data: Dictionary) -> void:
-	var effective_cost := int(tw_data.get("cost", 0))
-	if tower_manager:
-		effective_cost = tower_manager.get_effective_cost(tw_data)
-	if Game.player_coins < effective_cost:
+func _on_build_tower_button_pressed(tower_key: String) -> void:
+	if _selected_slot_id == -1:
+		_show_floating_text(get_global_mouse_position(), "先选择一个塔位", Color(1, 1, 0.4))
+		return
+	_request_place_tower(_selected_slot_id, tower_key)
+
+func _request_place_tower(slot_id: int, tower_key: String) -> void:
+	var tower_data: Dictionary = _tower_data.get_tower_by_key(tower_key)
+	if tower_data.is_empty():
+		return
+	if Game.player_coins < int(tower_data.get("cost", 0)):
 		_show_floating_text(get_global_mouse_position(), "金币不足！", Color(1, 0.2, 0.2))
 		add_screen_shake(2.0)
 		return
-		
-	_is_dragging_tower = true
-	_drag_tower_data = tw_data
-	
-	if _ghost_tower:
-		_ghost_tower.queue_free()
-	
-	_ghost_tower = tower_manager.build_ghost_tower(tw_data, get_global_mouse_position())
+	if not tower_manager.can_place_on_slot(slot_id):
+		var slot_info: Dictionary = tower_manager.get_slot_data(slot_id)
+		var pos: Vector2 = slot_info.get("position", get_global_mouse_position())
+		_show_floating_text(pos, "该塔位已被占用", Color(1, 0.2, 0.2))
+		add_screen_shake(2.0)
+		return
+	tower_manager.place_tower_on_slot(slot_id, tower_key)
 
-	add_child(_ghost_tower)
+func _select_tower_slot(slot_id: int) -> void:
+	var slot_info: Dictionary = tower_manager.get_slot_data(slot_id)
+	var is_occupied := bool(slot_info.get("occupied", false))
+	if slot_id == _selected_slot_id and is_occupied and tower_info_panel and tower_info_panel.visible:
+		_selected_slot_id = -1
+		_hide_tower_info_panel()
+		_preview_tower_key = ""
+		_refresh_slot_markers()
+		return
 
-func _can_place_tower_at(pos: Vector2) -> bool:
-	return tower_manager.can_place_tower_at(pos)
+	_selected_slot_id = slot_id
+	_refresh_slot_markers()
+	var slot_pos: Vector2 = slot_info.get("position", get_global_mouse_position())
+	if is_occupied:
+		_show_tower_info_panel(slot_id)
+		_show_floating_text(slot_pos, "已选中已有塔位", Color(0.7, 0.85, 1.0))
+	else:
+		_hide_tower_info_panel()
+		_preview_tower_key = ""
+		_show_floating_text(slot_pos, "已选中空塔位", Color(0.7, 1.0, 0.7))
 
-func _place_tower(pos: Vector2, tw_data: Dictionary) -> void:
-	tower_manager.place_tower(pos, tw_data)
-
-func _on_tower_placed(pos: Vector2, tw_data: Dictionary) -> void:
-	_spawn_place_effect(pos, Color.WHITE)
+func _on_tower_placed(slot_id: int, tower_node: Node2D, tw_data: Dictionary) -> void:
+	_spawn_place_effect(tower_node.global_position, Color.WHITE)
 	add_screen_shake(2.0)
 	_update_hud()
-	print_rich("[color=orange][Tower][/color] 已建造: %s 于 %s" % [tw_data.name, pos])
+	_selected_slot_id = -1
+	_preview_tower_key = ""
+	_hide_tower_info_panel()
+	_refresh_slot_markers()
+	print_rich("[color=orange][Tower][/color] 已建造: %s 于 slot %d" % [String(tw_data.get("name", "Tower")), slot_id])
+
+func _build_slot_markers() -> void:
+	for marker in _slot_marker_nodes.values():
+		if is_instance_valid(marker):
+			marker.queue_free()
+	_slot_marker_nodes.clear()
+
+	for slot in tower_manager.get_all_slots():
+		var slot_id := int(slot.get("id", -1))
+		var slot_node = tower_manager.get_slot_node(slot_id)
+		if slot_node == null:
+			continue
+
+		var marker := ColorRect.new()
+		marker.name = "SlotMarker"
+		marker.size = Vector2(54, 54)
+		marker.position = Vector2(-27, -27)
+		marker.color = Color(0.9, 0.9, 0.95, 0.25)
+		marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		slot_node.add_child(marker)
+		_slot_marker_nodes[slot_id] = marker
+
+	_refresh_slot_markers()
+
+func _refresh_slot_markers() -> void:
+	for slot in tower_manager.get_all_slots():
+		var slot_id := int(slot.get("id", -1))
+		var marker := _slot_marker_nodes.get(slot_id, null) as ColorRect
+		if marker == null:
+			continue
+
+		if bool(slot.get("occupied", false)):
+			var tower_data: Dictionary = slot.get("tower_data", {})
+			marker.color = _get_slot_base_color(bool(slot.get("occupied", false)), String(tower_data.get("type", "")))
+		else:
+			marker.color = _get_slot_base_color(false, "")
+
+		if _mod_target_slot_ids.has(slot_id):
+			marker.color = Color(1.0, 0.65, 0.2, 0.6)
+
+		if slot_id == _hovered_slot_id and slot_id != _selected_slot_id:
+			marker.color = Color(1.0, 1.0, 1.0, 0.42)
+
+		if slot_id == _selected_slot_id:
+			marker.color = _get_slot_selected_color(slot)
+
+func _show_tower_info_panel(slot_id: int) -> void:
+	var slot_info: Dictionary = tower_manager.get_slot_data(slot_id)
+	if slot_info.is_empty() or not bool(slot_info.get("occupied", false)):
+		_hide_tower_info_panel()
+		return
+
+	var tower_data: Dictionary = slot_info.get("tower_data", {})
+	var tower_node := slot_info.get("tower_node", null) as Node2D
+	if tower_data.is_empty() or tower_node == null:
+		_hide_tower_info_panel()
+		return
+
+	if tower_info_panel == null:
+		tower_info_panel = PanelContainer.new()
+		tower_info_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+		tower_info_panel.offset_left = -300
+		tower_info_panel.offset_top = 24
+		tower_info_panel.offset_right = -24
+		tower_info_panel.offset_bottom = 220
+		tower_info_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tower_info_panel.visible = false
+		ui.add_child(tower_info_panel)
+
+	tower_info_panel.visible = true
+	for child in tower_info_panel.get_children():
+		child.queue_free()
+
+	var info_box := VBoxContainer.new()
+	info_box.add_theme_constant_override("separation", 10)
+	tower_info_panel.add_child(info_box)
+
+	var title := Label.new()
+	title.text = "塔信息"
+	title.add_theme_font_size_override("font_size", 22)
+	info_box.add_child(title)
+
+	var badge := Label.new()
+	badge.text = _get_tower_info_badge_text(String(tower_data.get("type", "")))
+	badge.add_theme_color_override("font_color", _get_tower_type_accent(String(tower_data.get("type", ""))))
+	badge.add_theme_font_size_override("font_size", 14)
+	info_box.add_child(badge)
+
+	var name_label := Label.new()
+	name_label.text = "%s  |  Slot %d" % [String(tower_data.get("name", "未知塔")), slot_id + 1]
+	name_label.add_theme_font_size_override("font_size", 18)
+	info_box.add_child(name_label)
+
+	var role_label := Label.new()
+	role_label.text = "类型: %s" % _get_tower_role_text(String(tower_data.get("type", "")))
+	info_box.add_child(role_label)
+
+	var effect_label := Label.new()
+	effect_label.text = _build_tower_effect_text(tower_data, tower_node)
+	effect_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	info_box.add_child(effect_label)
+
+	if tower_data.has("applied_mod_name"):
+		var mod_label := Label.new()
+		mod_label.text = "改造: %s" % String(tower_data.get("applied_mod_name", ""))
+		mod_label.add_theme_color_override("font_color", Color(1.0, 0.8, 0.35))
+		mod_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		info_box.add_child(mod_label)
+
+	var tip_label := Label.new()
+	tip_label.text = "再次点击这座塔可收起面板，点击空塔位可切回建塔。"
+	tip_label.add_theme_color_override("font_color", Color(0.75, 0.75, 0.82))
+	tip_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	info_box.add_child(tip_label)
+
+func _hide_tower_info_panel() -> void:
+	if tower_info_panel:
+		tower_info_panel.visible = false
+
+func _update_hovered_slot() -> void:
+	var next_hovered_slot := -1
+	if not Game.is_paused and not Game.is_game_over:
+		next_hovered_slot = tower_manager.find_slot_id_at_position(get_global_mouse_position())
+	if next_hovered_slot != _hovered_slot_id:
+		_hovered_slot_id = next_hovered_slot
+		_refresh_slot_markers()
+
+func _on_shop_button_hovered(tower_key: String) -> void:
+	_preview_tower_key = tower_key
+
+func _on_shop_button_unhovered(tower_key: String) -> void:
+	if _preview_tower_key == tower_key:
+		_preview_tower_key = ""
+
+func _open_debug_tower_mod_offer() -> void:
+	var offers: Array[Dictionary] = tower_mod_manager.get_debug_offers(tower_manager.get_all_slots())
+	if offers.is_empty():
+		_show_floating_text(player.global_position + Vector2(0, -72), "当前没有可用的塔改造目标", Color(1.0, 0.8, 0.35))
+		return
+
+	_show_tower_mod_offer_panel(offers)
+	Game.request_pause("tower_mod_offer")
+
+func _queue_elite_tower_mod_offer(world_pos: Vector2) -> void:
+	_pending_elite_mod_offers += 1
+	_show_floating_text(world_pos + Vector2(0, -32), "精英掉落了塔改造机会", Color(1.0, 0.8, 0.35))
+	_try_open_pending_tower_mod_offer()
+
+func _try_open_pending_tower_mod_offer() -> void:
+	if _pending_elite_mod_offers <= 0:
+		return
+	if Game.is_game_over or Game.is_paused:
+		return
+	if _is_waiting_for_mod_target():
+		return
+	if tower_mod_offer_panel and tower_mod_offer_panel.visible:
+		return
+	if upgrade_panel and upgrade_panel.visible:
+		return
+
+	var offers: Array[Dictionary] = tower_mod_manager.get_debug_offers(tower_manager.get_all_slots())
+	if offers.is_empty():
+		return
+
+	_pending_elite_mod_offers -= 1
+	_show_tower_mod_offer_panel(offers)
+	Game.request_pause("tower_mod_offer")
+
+func _show_tower_mod_offer_panel(offers: Array[Dictionary]) -> void:
+	tower_mod_manager.start_offer(offers)
+	_mod_target_slot_ids.clear()
+
+	if tower_mod_offer_panel == null:
+		tower_mod_offer_panel = PanelContainer.new()
+		tower_mod_offer_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+		tower_mod_offer_panel.custom_minimum_size = Vector2(760, 320)
+		tower_mod_offer_panel.process_mode = Node.PROCESS_MODE_WHEN_PAUSED
+		tower_mod_offer_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+		tower_mod_offer_panel.visible = false
+		tower_mod_offer_panel.z_index = 120
+		ui.add_child(tower_mod_offer_panel)
+
+	tower_mod_offer_panel.visible = true
+	for child in tower_mod_offer_panel.get_children():
+		child.queue_free()
+
+	var root := VBoxContainer.new()
+	root.add_theme_constant_override("separation", 14)
+	tower_mod_offer_panel.add_child(root)
+
+	var title := Label.new()
+	title.text = "调试塔改造"
+	title.add_theme_font_size_override("font_size", 26)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	root.add_child(title)
+
+	var subtitle := Label.new()
+	subtitle.text = "按 M 打开。先选择一个改造，再点击兼容的塔位装备。"
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle.add_theme_color_override("font_color", Color(0.78, 0.78, 0.84))
+	root.add_child(subtitle)
+
+	var options := HBoxContainer.new()
+	options.alignment = BoxContainer.ALIGNMENT_CENTER
+	options.add_theme_constant_override("separation", 18)
+	root.add_child(options)
+
+	for offer in offers:
+		var btn := Button.new()
+		btn.custom_minimum_size = Vector2(210, 150)
+		btn.text = "%s\n%s" % [String(offer.get("name", "")), String(offer.get("description", ""))]
+		btn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		btn.add_theme_font_size_override("font_size", 16)
+		btn.pressed.connect(_on_tower_mod_offer_selected.bind(String(offer.get("id", ""))))
+		options.add_child(btn)
+
+func _on_tower_mod_offer_selected(mod_id: String) -> void:
+	var mod_data: Dictionary = tower_mod_manager.select_offer(mod_id)
+	if mod_data.is_empty():
+		return
+
+	_mod_target_slot_ids = tower_mod_manager.get_compatible_slot_ids(tower_manager.get_all_slots())
+	if _mod_target_slot_ids.is_empty():
+		_show_floating_text(player.global_position + Vector2(0, -72), "没有兼容这次改造的塔位", Color(1.0, 0.4, 0.35))
+		_close_tower_mod_offer_flow()
+		return
+
+	if tower_mod_offer_panel:
+		tower_mod_offer_panel.visible = false
+	Game.release_pause("tower_mod_offer")
+	_selected_slot_id = -1
+	_hide_tower_info_panel()
+	_preview_tower_key = ""
+	_refresh_slot_markers()
+	_show_floating_text(player.global_position + Vector2(0, -72), "选择一座高亮塔位来装备改造", Color(1.0, 0.8, 0.35))
+
+func _is_waiting_for_mod_target() -> bool:
+	return tower_mod_manager and tower_mod_manager.has_pending_mod() and not _mod_target_slot_ids.is_empty()
+
+func _try_apply_pending_mod(slot_id: int) -> void:
+	if not _mod_target_slot_ids.has(slot_id):
+		var slot_info: Dictionary = tower_manager.get_slot_data(slot_id)
+		var slot_pos: Vector2 = slot_info.get("position", get_global_mouse_position())
+		_show_floating_text(slot_pos, "这座塔不兼容当前改造", Color(1.0, 0.45, 0.35))
+		return
+
+	var slot_node = tower_manager.get_slot_node(slot_id)
+	var applied_mod: Dictionary = tower_mod_manager.apply_pending_mod_to_slot(slot_id, slot_node)
+	if applied_mod.is_empty():
+		return
+
+	_mod_target_slot_ids.clear()
+	_refresh_slot_markers()
+	_show_tower_info_panel(slot_id)
+
+func _on_tower_mod_applied(slot_id: int, mod_data: Dictionary) -> void:
+	var slot_info: Dictionary = tower_manager.get_slot_data(slot_id)
+	var slot_pos: Vector2 = slot_info.get("position", player.global_position)
+	_show_floating_text(slot_pos, "改造完成: %s" % String(mod_data.get("name", "")), Color(1.0, 0.82, 0.35))
+	add_screen_shake(2.0)
+
+func _close_tower_mod_offer_flow() -> void:
+	_mod_target_slot_ids.clear()
+	if tower_mod_manager:
+		tower_mod_manager.clear_offer_state()
+	if tower_mod_offer_panel:
+		tower_mod_offer_panel.visible = false
+	_selected_slot_id = -1
+	_preview_tower_key = ""
+	_hide_tower_info_panel()
+	if Game.is_paused:
+		Game.release_pause("tower_mod_offer")
+	_refresh_slot_markers()
+
+func _ensure_range_preview() -> void:
+	if _range_preview != null:
+		return
+
+	_range_preview = Polygon2D.new()
+	_range_preview.name = "RangePreview"
+	_range_preview.visible = false
+	_range_preview.z_index = -1
+	add_child(_range_preview)
+
+func _update_range_preview() -> void:
+	if _range_preview == null:
+		return
+
+	var preview_info := _get_range_preview_info()
+	if preview_info.is_empty():
+		_range_preview.visible = false
+		return
+
+	var center: Vector2 = preview_info.get("position", Vector2.ZERO)
+	var radius: float = float(preview_info.get("radius", 0.0))
+	var color: Color = preview_info.get("color", Color(1, 1, 1, 0.18))
+	if radius <= 0.0:
+		_range_preview.visible = false
+		return
+
+	_range_preview.polygon = _build_circle_polygon(radius, 40)
+	_range_preview.position = center
+	_range_preview.color = color
+	_range_preview.visible = true
+
+func _get_range_preview_info() -> Dictionary:
+	if _selected_slot_id == -1:
+		return {}
+
+	var slot_info: Dictionary = tower_manager.get_slot_data(_selected_slot_id)
+	if slot_info.is_empty():
+		return {}
+
+	var slot_pos: Vector2 = slot_info.get("position", Vector2.ZERO)
+	var is_occupied := bool(slot_info.get("occupied", false))
+	var tower_data: Dictionary = {}
+	if is_occupied:
+		tower_data = slot_info.get("tower_data", {})
+	elif not _preview_tower_key.is_empty():
+		tower_data = _tower_data.get_tower_by_key(_preview_tower_key)
+
+	if tower_data.is_empty():
+		return {}
+
+	var tower_type := String(tower_data.get("type", ""))
+	var preview_color := _get_tower_type_accent(tower_type)
+	preview_color.a = 0.14
+	return {
+		"position": slot_pos,
+		"radius": float(tower_data.get("range", 0.0)),
+		"color": preview_color,
+	}
+
+func _build_circle_polygon(radius: float, points: int = 32) -> PackedVector2Array:
+	var polygon := PackedVector2Array()
+	polygon.append(Vector2.ZERO)
+	for i in range(points + 1):
+		var angle := TAU * float(i) / float(points)
+		polygon.append(Vector2(cos(angle), sin(angle)) * radius)
+	return polygon
+
+func _build_tower_effect_text(tower_data: Dictionary, tower_node: Node2D) -> String:
+	var tower_type := String(tower_data.get("type", ""))
+	if tower_type == "aura":
+		var buff_pct := int(round(float(tower_data.get("buff", 0.0)) * 100.0))
+		var aura_range := int(round(float(tower_data.get("range", 0.0))))
+		return "效果: 为范围内友方提供 %d%% 增益\n覆盖: %d px" % [buff_pct, aura_range]
+
+	var auto_attack_node := tower_node.get_node_or_null("AutoAttack") as AutoAttackSystem
+	var damage := int(tower_data.get("dmg", 0))
+	var attack_range := int(round(float(tower_data.get("range", 0.0))))
+	var cooldown := float(tower_data.get("iv", 0.0))
+	if auto_attack_node:
+		damage = auto_attack_node.base_damage
+		attack_range = int(round(auto_attack_node.attack_range))
+		cooldown = auto_attack_node.base_cooldown
+
+	return "伤害: %d\n范围: %d px\n间隔: %.1f s" % [damage, attack_range, cooldown]
+
+func _get_tower_role_text(tower_type: String) -> String:
+	match tower_type:
+		"attack":
+			return "输出塔"
+		"control":
+			return "控制输出塔"
+		"aura":
+			return "辅助塔"
+		_:
+			return "未知"
+
+func _get_slot_base_color(is_occupied: bool, tower_type: String) -> Color:
+	if not is_occupied:
+		return Color(0.9, 0.9, 0.95, 0.25)
+
+	match tower_type:
+		"attack":
+			return Color(1.0, 0.45, 0.45, 0.35)
+		"control":
+			return Color(0.45, 0.75, 1.0, 0.35)
+		"aura":
+			return Color(0.45, 1.0, 0.55, 0.35)
+		_:
+			return Color(0.35, 0.55, 0.8, 0.35)
+
+func _get_slot_selected_color(slot: Dictionary) -> Color:
+	var is_occupied := bool(slot.get("occupied", false))
+	if not is_occupied:
+		return Color(1.0, 0.9, 0.35, 0.55)
+
+	var tower_data: Dictionary = slot.get("tower_data", {})
+	var accent := _get_tower_type_accent(String(tower_data.get("type", "")))
+	return Color(accent.r, accent.g, accent.b, 0.58)
+
+func _get_tower_type_accent(tower_type: String) -> Color:
+	match tower_type:
+		"attack":
+			return Color(1.0, 0.55, 0.48)
+		"control":
+			return Color(0.52, 0.8, 1.0)
+		"aura":
+			return Color(0.55, 1.0, 0.65)
+		_:
+			return Color(1.0, 0.9, 0.35)
+
+func _get_tower_info_badge_text(tower_type: String) -> String:
+	match tower_type:
+		"attack":
+			return "主力输出"
+		"control":
+			return "控场输出"
+		"aura":
+			return "范围辅助"
+		_:
+			return "未知定位"
 
 # ========== 屏幕震动 ==========
 

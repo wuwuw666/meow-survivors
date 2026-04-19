@@ -1,3 +1,7 @@
+## Enemy base runtime
+## GDD: design/gdd/enemy-system.md
+## Handles path movement, health, collision, and death signaling.
+
 class_name EnemyBase
 extends CharacterBody2D
 
@@ -28,6 +32,7 @@ var _hp_bar: ProgressBar = null
 
 func _ready() -> void:
 	_load_enemy_data()
+	_setup_visuals()
 	_setup_health()
 	_setup_health_bar()
 	_setup_collision()
@@ -193,6 +198,26 @@ func _on_hp_changed(current: int, max_val: int) -> void:
 	_hp_bar.max_value = max_val
 	_hp_bar.visible = true
 
+func _setup_visuals() -> void:
+	var sprite := get_node_or_null("Sprite") as ColorRect
+	if sprite == null:
+		return
+
+	var body_size: float = float(_data.get("body_size", 14.0))
+	var diameter: float = body_size * 1.45
+	sprite.size = Vector2(diameter, diameter)
+	sprite.position = Vector2(-diameter * 0.5, -diameter * 0.5)
+	sprite.pivot_offset = sprite.size * 0.5
+	sprite.rotation = 0.0
+	sprite.color = _get_enemy_fill_color()
+
+	if enemy_type == "elite":
+		sprite.rotation = deg_to_rad(45.0)
+	elif enemy_type == "boss":
+		sprite.size *= 1.12
+		sprite.position = Vector2(-sprite.size.x * 0.5, -sprite.size.y * 0.5)
+		sprite.pivot_offset = sprite.size * 0.5
+
 func _setup_health_bar() -> void:
 	_hp_bar = ProgressBar.new()
 	_hp_bar.name = "HealthBar"
@@ -201,26 +226,54 @@ func _setup_health_bar() -> void:
 
 	var bar_width: float = 40.0
 	var bar_height: float = 4.0
+	if enemy_type == "elite":
+		bar_width = 58.0
+		bar_height = 6.0
+	elif enemy_type == "boss":
+		bar_width = 88.0
+		bar_height = 8.0
+
 	_hp_bar.custom_minimum_size = Vector2(bar_width, bar_height)
-	_hp_bar.position = Vector2(-bar_width / 2.0, -float(_data.get("body_size", 14.0)) - 10.0)
+	_hp_bar.position = Vector2(-bar_width * 0.5, -float(_data.get("body_size", 14.0)) - 10.0)
 
-	var background_style: StyleBoxFlat = StyleBoxFlat.new()
-	background_style.bg_color = Color(0.1, 0.1, 0.1, 0.6)
-	background_style.set_border_width_all(1)
-	background_style.border_color = Color(0, 0, 0, 0.8)
+	var sb_bg := StyleBoxFlat.new()
+	sb_bg.bg_color = Color(0.1, 0.1, 0.1, 0.6)
+	sb_bg.set_border_width_all(1)
+	sb_bg.border_color = Color(0, 0, 0, 0.8)
 
-	var fill_style: StyleBoxFlat = StyleBoxFlat.new()
-	fill_style.bg_color = Color(0.9, 0.2, 0.2)
-	fill_style.set_border_width_all(1)
-	fill_style.border_color = Color(0, 0, 0, 0)
+	var sb_fg := StyleBoxFlat.new()
+	sb_fg.bg_color = _get_health_bar_fill_color()
+	sb_fg.set_border_width_all(1)
+	sb_fg.border_color = Color(0, 0, 0, 0)
 
-	_hp_bar.add_theme_stylebox_override("background", background_style)
-	_hp_bar.add_theme_stylebox_override("fill", fill_style)
+	_hp_bar.add_theme_stylebox_override("background", sb_bg)
+	_hp_bar.add_theme_stylebox_override("fill", sb_fg)
 	_hp_bar.max_value = int(_data.get("hp", 1))
 	_hp_bar.value = int(_data.get("hp", 1))
 	_hp_bar.visible = true
-
 	add_child(_hp_bar)
+
+func _get_enemy_fill_color() -> Color:
+	match enemy_type:
+		"normal_b":
+			return Color(0.95, 0.45, 0.3)
+		"normal_c":
+			return Color(0.75, 0.2, 0.2)
+		"elite":
+			return Color(1.0, 0.72, 0.22)
+		"boss":
+			return Color(0.78, 0.28, 1.0)
+		_:
+			return Color(0.9, 0.2, 0.2)
+
+func _get_health_bar_fill_color() -> Color:
+	match enemy_type:
+		"elite":
+			return Color(1.0, 0.82, 0.3)
+		"boss":
+			return Color(0.9, 0.35, 1.0)
+		_:
+			return Color(0.9, 0.2, 0.2)
 
 func is_alive() -> bool:
 	return not is_dead

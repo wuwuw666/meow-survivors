@@ -1,10 +1,13 @@
 class_name TowerManager
 extends Node
 
-signal tower_placed(pos: Vector2, tower_data: Dictionary)
+signal tower_placed(slot_id: int, tower_node: Node2D, tower_data: Dictionary)
 
 var _host: Node2D = null
 var _projectile_scene: PackedScene = null
+var _tower_data = null
+var _slots: Array = []
+var _slot_nodes_by_id: Dictionary = {}
 var _tower_damage_bonus: float = 0.0
 var _tower_attack_speed_bonus: float = 0.0
 var _tower_range_bonus: float = 0.0
@@ -18,46 +21,95 @@ func bind_host(host: Node2D, projectile_scene: PackedScene) -> void:
 	_host = host
 	_projectile_scene = projectile_scene
 
+func bind_tower_data(tower_data) -> void:
+	_tower_data = tower_data
+
 func get_effective_cost(tw_data: Dictionary) -> int:
 	var base_cost: int = int(tw_data.get("cost", 0))
 	var scaled: int = int(round(float(base_cost) * (1.0 + _tower_cost_multiplier)))
 	return max(scaled, 1)
 
-func can_place_tower_at(pos: Vector2) -> bool:
-	for tw_dict in Game.placed_towers:
-		var tower_node: Node2D = tw_dict.get("node") as Node2D
-		if is_instance_valid(tower_node) and pos.distance_to(tower_node.global_position) < 60.0:
-			return false
-	return true
+func load_slots_from_node(slots_root: Node) -> void:
+	_slots.clear()
+	_slot_nodes_by_id.clear()
+	if slots_root == null:
+		push_warning("TowerManager: No TowerSlots node found.")
+		return
 
-func build_ghost_tower(tw_data: Dictionary, mouse_pos: Vector2) -> ColorRect:
-	var ghost := ColorRect.new()
-	ghost.size = Vector2(44, 44)
-	ghost.pivot_offset = Vector2(22, 22)
-	ghost.position = mouse_pos - Vector2(22, 22)
-	ghost.modulate.a = 0.5
-	ghost.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var slot_id: int = 0
+	for child in slots_root.get_children():
+		if child.has_method("configure_slot") and child.has_method("reset_runtime_state"):
+			var slot_node = child
+			slot_node.configure_slot(slot_id)
+			slot_node.reset_runtime_state()
+			_slots.append(slot_node)
+			_slot_nodes_by_id[slot_id] = slot_node
+			slot_id += 1
 
-	match String(tw_data.get("type", "")):
-		"attack":
-			ghost.color = Color(1, 0.45, 0.45)
-		"control":
-			ghost.color = Color(0.45, 0.75, 1.0)
-		"aura":
-			ghost.color = Color(0.45, 1.0, 0.55)
+func get_all_slots() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for slot in _slots:
+		result.append(slot.to_runtime_dict())
+	return result
 
-	return ghost
+func get_slot_data(slot_id: int) -> Dictionary:
+	var index := _find_slot_index(slot_id)
+	if index == -1:
+		return {}
+	return _slots[index].to_runtime_dict()
 
-func place_tower(pos: Vector2, tw_data: Dictionary) -> Node2D:
+func get_slot_node(slot_id: int):
+	return _slot_nodes_by_id.get(slot_id, null)
+
+func can_place_on_slot(slot_id: int) -> bool:
+	var index := _find_slot_index(slot_id)
+	if index == -1:
+		return false
+	return _slots[index].can_place()
+
+func find_slot_id_at_position(world_pos: Vector2, radius: float = 36.0) -> int:
+	var best_slot_id: int = -1
+	var best_distance_sq: float = radius * radius
+	for slot in _slots:
+		var dist_sq: float = slot.global_position.distance_squared_to(world_pos)
+		if dist_sq <= best_distance_sq:
+			best_distance_sq = dist_sq
+			best_slot_id = slot.slot_id
+	return best_slot_id
+
+func get_tower_on_slot(slot_id: int) -> Node2D:
+	var index := _find_slot_index(slot_id)
+	if index == -1:
+		return null
+	return _slots[index].tower_node
+
+func place_tower_on_slot(slot_id: int, tower_key: String) -> Node2D:
 	if _host == null:
 		return null
+	if _tower_data == null:
+		push_error("TowerManager: tower data is not bound.")
+		return null
+	if not can_place_on_slot(slot_id):
+		return null
+
+	var tw_data: Dictionary = _tower_data.get_tower_by_key(tower_key)
+	if tw_data.is_empty():
+		push_warning("TowerManager: invalid tower key %s" % tower_key)
+		return null
+
 	var tower_cost := get_effective_cost(tw_data)
 	if not Game.spend_coins(tower_cost):
 		return null
 
+	var index: int = _find_slot_index(slot_id)
+	if index == -1:
+		return null
+	var slot = _slots[index]
+	var slot_pos: Vector2 = slot.global_position
+
 	var tower_node := Node2D.new()
 	tower_node.name = "Tower_%s_%d" % [String(tw_data.get("key", "tower")), randi() % 1000]
-	tower_node.global_position = pos
+	tower_node.global_position = slot_pos
 	_host.add_child(tower_node)
 
 	var sprite := ColorRect.new()
@@ -92,17 +144,21 @@ func place_tower(pos: Vector2, tw_data: Dictionary) -> Node2D:
 
 	var tower_entry := {
 		"node": tower_node,
+		"slot_id": slot_id,
 		"key": String(tw_data.get("key", "")),
+		"tower_key": String(tw_data.get("key", "")),
 		"type": String(tw_data.get("type", "")),
 		"damage": int(tw_data.get("dmg", 0)),
 		"cost": tower_cost,
 		"range": float(tw_data.get("range", 0.0)),
-		"buff": float(tw_data.get("buff", 0.12)) + _aura_buff_bonus,
-		"specialization": String(tower_node.get_meta("specialization", ""))
+		"buff": float(tw_data.get("buff", 0.15)) + _aura_buff_bonus,
+		"specialization": String(tower_node.get_meta("specialization", "")),
 	}
 	Game.placed_towers.append(tower_entry)
 
-	tower_placed.emit(pos, tw_data)
+	slot.assign_tower(tower_node, _build_runtime_tower_data(tw_data, tower_entry))
+
+	tower_placed.emit(slot_id, tower_node, tw_data)
 	return tower_node
 
 func apply_upgrade_effect(effect_type: String, value: Variant) -> bool:
@@ -124,7 +180,7 @@ func apply_upgrade_effect(effect_type: String, value: Variant) -> bool:
 			return true
 		"aura_buff_flat":
 			_aura_buff_bonus += float(value)
-			_refresh_aura_towers()
+			_refresh_aura_towers(float(value))
 			return true
 		"fish_split_targets":
 			_fish_split_targets += int(value)
@@ -140,6 +196,14 @@ func apply_upgrade_effect(effect_type: String, value: Variant) -> bool:
 			return _specialize_best_tower("yarn")
 	return false
 
+func _build_runtime_tower_data(tw_data: Dictionary, tower_entry: Dictionary) -> Dictionary:
+	var runtime_data: Dictionary = tw_data.duplicate(true)
+	runtime_data["cost"] = int(tower_entry.get("cost", runtime_data.get("cost", 0)))
+	runtime_data["range"] = float(tower_entry.get("range", runtime_data.get("range", 0.0)))
+	if runtime_data.has("buff") or tower_entry.has("buff"):
+		runtime_data["buff"] = float(tower_entry.get("buff", runtime_data.get("buff", 0.0)))
+	return runtime_data
+
 func _refresh_attack_towers() -> void:
 	for tw_dict in Game.placed_towers:
 		if not tw_dict.has("node"):
@@ -152,13 +216,18 @@ func _refresh_attack_towers() -> void:
 			continue
 		_apply_attack_tower_modifiers(aa)
 
-func _refresh_aura_towers() -> void:
+func _refresh_aura_towers(buff_delta: float = 0.0) -> void:
 	for idx in range(Game.placed_towers.size()):
 		var tw_dict: Dictionary = Game.placed_towers[idx]
 		if String(tw_dict.get("type", "")) != "aura":
 			continue
-		tw_dict["buff"] = 0.12 + _aura_buff_bonus
+		tw_dict["buff"] = float(tw_dict.get("buff", 0.15)) + buff_delta
 		Game.placed_towers[idx] = tw_dict
+
+		var slot_id: int = int(tw_dict.get("slot_id", -1))
+		var slot = _slot_nodes_by_id.get(slot_id, null)
+		if slot and slot.tower_data is Dictionary:
+			slot.tower_data["buff"] = tw_dict["buff"]
 
 func _apply_attack_tower_modifiers(auto_attack: AutoAttackSystem) -> void:
 	auto_attack.set_damage_bonus(_tower_damage_bonus)
@@ -288,3 +357,9 @@ func _sync_tower_entry(auto_attack: AutoAttackSystem) -> void:
 		tower_entry["specialization"] = String(tower_node.get_meta("specialization", ""))
 		Game.placed_towers[idx] = tower_entry
 		return
+
+func _find_slot_index(slot_id: int) -> int:
+	for index in range(_slots.size()):
+		if _slots[index].slot_id == slot_id:
+			return index
+	return -1
