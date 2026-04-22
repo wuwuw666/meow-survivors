@@ -44,8 +44,11 @@ var _slot_marker_nodes: Dictionary = {}
 var _tower_shop_buttons: Dictionary = {}
 var _preview_tower_key: String = ""
 var _range_preview: Polygon2D = null
+var _pending_build_tower_key: String = ""
 var _mod_target_slot_ids: Array[int] = []
 var _pending_elite_mod_offers: int = 0
+var _move_target_position: Vector2 = Vector2.ZERO
+var _has_move_target: bool = false
 
 # UI refs
 var hp_bar: ProgressBar
@@ -76,7 +79,7 @@ const ENEMY_SCENE_PATH: String = "res://scenes/characters/enemy_base.tscn"
 # ========== _ready ==========
 func _ready() -> void:
 	# 注册组，供弹丸系统查找父节点
-	process_mode = Node.PROCESS_MODE_WHEN_PAUSED
+	process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_to_group("main_game")
 	player.add_to_group("player")
 	if ui == null:
@@ -86,6 +89,7 @@ func _ready() -> void:
 			ui.name = "UI"
 			ui.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 			uilayer.add_child(ui)
+	_sync_ui_root_rect()
 
 	Game.reset_session()
 	_setup_components()
@@ -106,17 +110,20 @@ func _ready() -> void:
 	print_rich("[color=cyan][MainGame][/color] 核心系统已就绪，进入 [准备阶段]...")
 
 func _show_ready_ui() -> void:
+	_sync_ui_root_rect()
 	var btn := Button.new()
 	btn.name = "StartButton"
 	btn.text = "开始进攻"
-	btn.custom_minimum_size = Vector2(350, 80)
+	btn.size = Vector2(350, 80)
 	btn.process_mode = Node.PROCESS_MODE_WHEN_PAUSED
+	btn.mouse_filter = Control.MOUSE_FILTER_STOP
 	
-	# 使用锚点：居中底部
-	btn.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
-	btn.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	btn.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	btn.offset_bottom = -80
+	# CanvasLayer 下显式定位更稳定，避免底部锚点被错误计算
+	btn.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	btn.position = Vector2(
+		(ui.size.x - btn.size.x) * 0.5,
+		ui.size.y - btn.size.y - 80.0
+	)
 	
 	btn.add_theme_font_size_override("font_size", 24)
 	ui.add_child(btn)
@@ -256,15 +263,23 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		if _try_handle_ui_click_fallback(event.position):
+			return
+
+		if Game.is_paused:
+			return
+
 		var slot_id: int = tower_manager.find_slot_id_at_position(get_global_mouse_position())
 		if slot_id != -1:
 			if _is_waiting_for_mod_target():
 				_try_apply_pending_mod(slot_id)
-			elif not Game.is_paused:
+			elif not _pending_build_tower_key.is_empty():
+				_request_place_tower(slot_id, _pending_build_tower_key)
+			else:
 				_select_tower_slot(slot_id)
 			return
 
-	if Game.is_paused:
+		_set_move_target(get_global_mouse_position())
 		return
 
 func _process(delta: float) -> void:
@@ -278,7 +293,18 @@ func _process(delta: float) -> void:
 		if Input.is_action_pressed("move_down"): dir.y += 1
 		if Input.is_action_pressed("move_left"): dir.x -= 1
 		if Input.is_action_pressed("move_right"): dir.x += 1
-		movement.apply_movement(dir, delta)
+		if not dir.is_zero_approx():
+			_clear_move_target()
+			movement.apply_movement(dir, delta)
+		elif _has_move_target:
+			var to_target: Vector2 = _move_target_position - player.global_position
+			if to_target.length() <= 8.0:
+				_clear_move_target()
+				movement.apply_movement(Vector2.ZERO, delta)
+			else:
+				movement.apply_movement(to_target.normalized(), delta)
+		else:
+			movement.apply_movement(Vector2.ZERO, delta)
 		_update_hud()
 
 		# 处理拾取物（经验球和金币的磁铁吸引）
@@ -545,6 +571,7 @@ func _open_next_upgrade_panel() -> void:
 # ========== UI ==========
 func _build_ui() -> void:
 	# 设置主 UI 容器为全屏并忽略鼠标（防止拦截塔位点击）
+	_sync_ui_root_rect()
 	ui.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	ui.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
@@ -634,12 +661,9 @@ func _build_ui() -> void:
 	# 3. 塔的快捷商店 (左下角，不再使用 BOTTOM_LEFT Preset，直接利用屏幕高度固定摆放)
 	var shop_margin := MarginContainer.new()
 	shop_margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	# 固定位置放置，避免 Anchor 受分辨率和其它层级挤压影响
-	shop_margin.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
-	shop_margin.offset_left = 20
-	shop_margin.offset_top = -100
-	shop_margin.offset_right = 20
-	shop_margin.offset_bottom = -20
+	shop_margin.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	shop_margin.position = Vector2(20, ui.size.y - 104.0)
+	shop_margin.size = Vector2(760, 84)
 	ui.add_child(shop_margin)
 
 	var shop_hbox := HBoxContainer.new()
@@ -648,7 +672,7 @@ func _build_ui() -> void:
 	shop_margin.add_child(shop_hbox)
 
 	var t_lbl := Label.new()
-	t_lbl.text = "先点塔位，再建塔 👉 "
+	t_lbl.text = "点塔按钮再点塔位，或先选塔位再建塔 👉 "
 	t_lbl.add_theme_font_size_override("font_size", 16)
 	shop_hbox.add_child(t_lbl)
 
@@ -864,8 +888,15 @@ func _apply_upgrade(upgrade: Dictionary) -> bool:
 	return false
 
 func _on_build_tower_button_pressed(tower_key: String) -> void:
+	if Game.is_paused:
+		_show_floating_text(get_global_mouse_position(), "请先开始战斗", Color(1, 1, 0.4))
+		return
 	if _selected_slot_id == -1:
-		_show_floating_text(get_global_mouse_position(), "先选择一个塔位", Color(1, 1, 0.4))
+		_pending_build_tower_key = tower_key
+		_preview_tower_key = tower_key
+		var tower_data: Dictionary = _tower_data.get_tower_by_key(tower_key)
+		var tower_name: String = String(tower_data.get("name", "塔"))
+		_show_floating_text(get_global_mouse_position(), "已选择 %s，点击空塔位放置" % tower_name, Color(1, 1, 0.4))
 		return
 	_request_place_tower(_selected_slot_id, tower_key)
 
@@ -873,7 +904,11 @@ func _request_place_tower(slot_id: int, tower_key: String) -> void:
 	var tower_data: Dictionary = _tower_data.get_tower_by_key(tower_key)
 	if tower_data.is_empty():
 		return
-	if Game.player_coins < int(tower_data.get("cost", 0)):
+	_clear_move_target()
+	var effective_cost := int(tower_data.get("cost", 0))
+	if tower_manager:
+		effective_cost = tower_manager.get_effective_cost(tower_data)
+	if Game.player_coins < effective_cost:
 		_show_floating_text(get_global_mouse_position(), "金币不足！", Color(1, 0.2, 0.2))
 		add_screen_shake(2.0)
 		return
@@ -883,11 +918,17 @@ func _request_place_tower(slot_id: int, tower_key: String) -> void:
 		_show_floating_text(pos, "该塔位已被占用", Color(1, 0.2, 0.2))
 		add_screen_shake(2.0)
 		return
-	tower_manager.place_tower_on_slot(slot_id, tower_key)
+	var tower_node := tower_manager.place_tower_on_slot(slot_id, tower_key)
+	if tower_node == null:
+		_show_floating_text(get_global_mouse_position(), "放置失败", Color(1, 0.2, 0.2))
+		add_screen_shake(2.0)
+		return
+	_pending_build_tower_key = ""
 
 func _select_tower_slot(slot_id: int) -> void:
 	var slot_info: Dictionary = tower_manager.get_slot_data(slot_id)
 	var is_occupied := bool(slot_info.get("occupied", false))
+	_clear_move_target()
 	if slot_id == _selected_slot_id and is_occupied and tower_info_panel and tower_info_panel.visible:
 		_selected_slot_id = -1
 		_hide_tower_info_panel()
@@ -899,18 +940,25 @@ func _select_tower_slot(slot_id: int) -> void:
 	_refresh_slot_markers()
 	var slot_pos: Vector2 = slot_info.get("position", get_global_mouse_position())
 	if is_occupied:
+		_pending_build_tower_key = ""
 		_show_tower_info_panel(slot_id)
 		_show_floating_text(slot_pos, "已选中已有塔位", Color(0.7, 0.85, 1.0))
 	else:
 		_hide_tower_info_panel()
-		_preview_tower_key = ""
-		_show_floating_text(slot_pos, "已选中空塔位", Color(0.7, 1.0, 0.7))
+		if _pending_build_tower_key.is_empty():
+			_preview_tower_key = ""
+			_show_floating_text(slot_pos, "已选中空塔位", Color(0.7, 1.0, 0.7))
+		else:
+			var tower_data: Dictionary = _tower_data.get_tower_by_key(_pending_build_tower_key)
+			var tower_name: String = String(tower_data.get("name", "塔"))
+			_show_floating_text(slot_pos, "空塔位就绪，点击可放置 %s" % tower_name, Color(0.7, 1.0, 0.7))
 
 func _on_tower_placed(slot_id: int, tower_node: Node2D, tw_data: Dictionary) -> void:
 	_spawn_place_effect(tower_node.global_position, Color.WHITE)
 	add_screen_shake(2.0)
 	_update_hud()
 	_selected_slot_id = -1
+	_pending_build_tower_key = ""
 	_preview_tower_key = ""
 	_hide_tower_info_panel()
 	_refresh_slot_markers()
@@ -1188,6 +1236,38 @@ func _close_tower_mod_offer_flow() -> void:
 	if Game.is_paused:
 		Game.release_pause("tower_mod_offer")
 	_refresh_slot_markers()
+
+func _sync_ui_root_rect() -> void:
+	if ui == null:
+		return
+	ui.position = Vector2.ZERO
+	ui.size = get_viewport_rect().size
+
+func _try_handle_ui_click_fallback(screen_pos: Vector2) -> bool:
+	var start_button := ui.get_node_or_null("StartButton") as Button
+	if start_button and start_button.visible and start_button.get_global_rect().has_point(screen_pos):
+		_start_game_from_ready()
+		start_button.queue_free()
+		return true
+
+	for tower_key_variant in _tower_shop_buttons.keys():
+		var tower_key: String = String(tower_key_variant)
+		var tower_button := _tower_shop_buttons.get(tower_key, null) as Button
+		if tower_button and tower_button.visible and tower_button.get_global_rect().has_point(screen_pos):
+			_on_build_tower_button_pressed(tower_key)
+			return true
+
+	return false
+
+func _set_move_target(world_pos: Vector2) -> void:
+	_move_target_position = world_pos
+	_has_move_target = true
+	_selected_slot_id = -1
+	_hide_tower_info_panel()
+	_refresh_slot_markers()
+
+func _clear_move_target() -> void:
+	_has_move_target = false
 
 func _ensure_range_preview() -> void:
 	if _range_preview != null:
