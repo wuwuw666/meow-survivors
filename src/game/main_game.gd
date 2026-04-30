@@ -9,6 +9,7 @@ const UpgradeDataScript = preload("res://src/data/upgrade_data.gd")
 
 # ========== 节点引用 ==========
 @onready var player: CharacterBody2D = $Player
+@onready var home_base: Node2D = $HomeBase
 @onready var enemy_container: Node2D = $EnemyContainer
 @onready var ui: Control = get_node_or_null("UILayer/UI")
 @onready var damage_container: Node2D = $UILayer/DamageNumbers
@@ -19,15 +20,17 @@ const UpgradeDataScript = preload("res://src/data/upgrade_data.gd")
 @onready var target_sys: TargetSystem = null
 @onready var auto_attack: AutoAttackSystem = null
 @onready var hero_health: HealthComponent = null
+@onready var base_health: BaseHealthComponent = null
 @onready var feedback: CombatFeedbackManager = null
 @onready var spawn_manager: SpawnManager = null
 @onready var tower_manager: TowerManager = null
-var upgrade_data: UpgradeData = null
+var upgrade_data = null
 @onready var tower_mod_manager: TowerModManager = null
 
 # 弹丸场景（预加载）
 const PROJECTILE_SCENE: PackedScene = preload("res://scenes/gameplay/projectile.tscn")
 const COMBAT_FEEDBACK_MANAGER_SCRIPT := preload("res://src/game/combat_feedback_manager.gd")
+const BASE_HEALTH_COMPONENT_SCRIPT := preload("res://src/core/base_health_component.gd")
 const SPAWN_MANAGER_SCRIPT := preload("res://src/game/spawn_manager.gd")
 const TOWER_MANAGER_SCRIPT := preload("res://src/game/tower_manager.gd")
 const TOWER_DATA_SCRIPT := preload("res://src/data/tower_data.gd")
@@ -75,6 +78,7 @@ var _hit_flash_timer: float = 0.0
 var _pending_level_ups: int = 0
 
 const ENEMY_SCENE_PATH: String = "res://scenes/characters/enemy_base.tscn"
+const HOME_BASE_MAX_HP: int = 5
 
 # ========== _ready ==========
 func _ready() -> void:
@@ -96,18 +100,18 @@ func _ready() -> void:
 	upgrade_data = UpgradeDataScript.new()
 	_setup_tower_data()
 	_load_paths_from_nodes()
+	_snap_home_base_to_path_end()
 	_load_tower_slots()
 	# 设置背景点击穿透，否则 _unhandled_input 会被拦截
 	$Background.mouse_filter = Control.MOUSE_FILTER_PASS
 	_build_ui()
 	_setup_signals()
 
-	# 初始处于准备阶段，不自动启动波次
-	Game.request_pause(Game.PAUSE_REASON_READY)
-	_show_ready_ui()
-	if DisplayServer.get_name() == "headless":
-		_start_game_from_ready()
-	print_rich("[color=cyan][MainGame][/color] 核心系统已就绪，进入 [准备阶段]...")
+	# 原型阶段直接自动开始，避免等待准备按钮导致误判为“不出怪”
+	_game_started = true
+	Game.release_pause(Game.PAUSE_REASON_READY)
+	wave_manager.enable_waves()
+	print_rich("[color=cyan][MainGame][/color] 核心系统已就绪，自动开始进攻...")
 
 func _show_ready_ui() -> void:
 	_sync_ui_root_rect()
@@ -149,6 +153,23 @@ func _start_game_from_ready() -> void:
 func _load_paths_from_nodes() -> void:
 	if spawn_manager:
 		spawn_manager.load_paths_from_node(get_node_or_null("Paths") as Node2D)
+
+func _snap_home_base_to_path_end() -> void:
+	if home_base == null:
+		return
+
+	var paths_node := get_node_or_null("Paths") as Node2D
+	if paths_node == null:
+		return
+
+	for child in paths_node.get_children():
+		if child is Path2D:
+			var curve: Curve2D = child.curve
+			if curve and curve.point_count > 0:
+				var baked_points: PackedVector2Array = curve.get_baked_points()
+				if not baked_points.is_empty():
+					home_base.global_position = baked_points[baked_points.size() - 1]
+					return
 
 func _setup_tower_data() -> void:
 	_tower_data = TOWER_DATA_SCRIPT.new()
@@ -214,6 +235,12 @@ func _setup_components() -> void:
 	add_child(feedback)
 	feedback.bind_refs(player, damage_container, effect_container, $Camera2D)
 
+	base_health = BASE_HEALTH_COMPONENT_SCRIPT.new()
+	base_health.name = "BaseHealthComponent"
+	base_health.max_hp = HOME_BASE_MAX_HP
+	if home_base:
+		home_base.add_child(base_health)
+
 	spawn_manager = SPAWN_MANAGER_SCRIPT.new()
 	spawn_manager.name = "SpawnManager"
 	add_child(spawn_manager)
@@ -237,8 +264,12 @@ func _setup_signals() -> void:
 	if hero_health:
 		hero_health.hp_changed.connect(_on_hp_changed)
 		hero_health.damage_taken.connect(_on_player_damage_taken)
-		hero_health.player_died.connect(_on_player_died)
 		_on_hp_changed(hero_health.current_hp, hero_health.max_hp)
+	if base_health:
+		base_health.hp_changed.connect(_on_base_hp_changed)
+		base_health.damage_taken.connect(_on_base_damage_taken)
+		base_health.destroyed.connect(_on_base_destroyed)
+		_on_base_hp_changed(base_health.current_hp, base_health.max_hp)
 
 # ========== _process ==========
 func _unhandled_input(event: InputEvent) -> void:
@@ -367,22 +398,10 @@ func _on_spawn_requested(enemy_type: String) -> void:
 func _on_enemy_reached_base(enemy: Node) -> void:
 	if not is_instance_valid(enemy):
 		return
-	
-	# 扣除基地生命值
-	var enemy_base: EnemyBase = enemy as EnemyBase
-	var dmg: int = enemy_base._data.get("damage", 1)
-	if hero_health:
-		hero_health.apply_damage(dmg, {"kind": "base_reach"})
-	else:
-		Game.player_hp = clampi(Game.player_hp - dmg, 0, Game.player_max_hp)
-		_update_hud()
-	
-	# 如果生命归零则失败
-	if hero_health and hero_health.current_hp <= 0:
-		_on_player_died()
-	elif Game.player_hp <= 0:
-		_on_player_died()
-	
+
+	if base_health:
+		base_health.apply_damage(1, {"kind": "enemy_breached"})
+
 	# 销毁敌人
 	if not (enemy as EnemyBase).is_dead:
 		enemy.queue_free()
@@ -588,16 +607,16 @@ func _build_ui() -> void:
 	vbox.custom_minimum_size = Vector2(320, 0)
 	margin_stats.add_child(vbox)
 
-	# HP
+	# Home base durability
 	var hp_row := HBoxContainer.new()
 	var hp_icon := Label.new()
-	hp_icon.text = "❤️"
+	hp_icon.text = "🏠"
 	hp_icon.add_theme_font_size_override("font_size", 16)
 	hp_row.add_child(hp_icon)
 
 	hp_bar = ProgressBar.new()
-	hp_bar.value = 100
-	hp_bar.max_value = 100
+	hp_bar.value = HOME_BASE_MAX_HP
+	hp_bar.max_value = HOME_BASE_MAX_HP
 	hp_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hp_bar.custom_minimum_size = Vector2(0, 18)
 	hp_bar.show_percentage = false
@@ -606,7 +625,7 @@ func _build_ui() -> void:
 	hp_row.add_child(hp_bar)
 
 	hp_label = Label.new()
-	hp_label.text = "100/100"
+	hp_label.text = "%d/%d" % [HOME_BASE_MAX_HP, HOME_BASE_MAX_HP]
 	hp_label.add_theme_font_size_override("font_size", 14)
 	hp_label.custom_minimum_size = Vector2(70, 0)
 	hp_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -693,9 +712,10 @@ func _build_ui() -> void:
 func _update_hud() -> void:
 	if hp_bar == null:
 		return
-	hp_bar.value = Game.player_hp
-	hp_bar.max_value = Game.player_max_hp
-	hp_label.text = "%d/%d" % [Game.player_hp, Game.player_max_hp]
+	if base_health:
+		hp_bar.value = base_health.current_hp
+		hp_bar.max_value = base_health.max_hp
+		hp_label.text = "%d/%d" % [base_health.current_hp, base_health.max_hp]
 
 	xp_bar.value = Game.player_xp
 	xp_bar.max_value = Game.player_xp_needed
@@ -741,10 +761,11 @@ func _on_hp_changed(current: int, max_val: int) -> void:
 	if feedback:
 		feedback.notify_player_hp_changed(current)
 
+func _on_base_hp_changed(_current: int, _max_val: int) -> void:
+	_update_hud()
+
 func _on_player_damage_taken(amount: int, _current: int, _max_hp: int, context: Dictionary) -> void:
 	_show_floating_text(player.global_position + Vector2(0, -28), "-%d" % amount, Color(1, 0.2, 0.2))
-	if String(context.get("kind", "")) == "base_reach":
-		_show_floating_text(player.global_position + Vector2(0, -52), "-%d 🏠" % amount, Color(1, 0, 0))
 
 func _on_enemy_damage_taken(amount: int, _current: int, _max_hp: int, context: Dictionary, enemy: Node) -> void:
 	if not is_instance_valid(enemy):
@@ -752,7 +773,22 @@ func _on_enemy_damage_taken(amount: int, _current: int, _max_hp: int, context: D
 	var is_crit := bool(context.get("crit", false))
 	_show_damage_number(enemy.global_position, amount, is_crit)
 
-func _on_player_died() -> void:
+func _on_base_damage_taken(amount: int, _current: int, _max_hp: int, _context: Dictionary) -> void:
+	if not home_base:
+		return
+	_show_floating_text(home_base.global_position + Vector2(0, -90), "-%d 🏠" % amount, Color(1, 0.2, 0.2))
+	home_base.scale = Vector2(0.98, 0.98)
+	var tw := create_tween()
+	tw.tween_property(home_base, "scale", Vector2(1.04, 1.04), 0.08)
+	tw.tween_property(home_base, "scale", Vector2.ONE, 0.10)
+	if home_base.get_child_count() > 0:
+		var sprite := home_base.get_node_or_null("Sprite2D") as CanvasItem
+		if sprite:
+			sprite.modulate = Color(1.0, 0.7, 0.7)
+			var flash_tween := create_tween()
+			flash_tween.tween_property(sprite, "modulate", Color.WHITE, 0.18)
+
+func _on_base_destroyed() -> void:
 	Game.is_game_over = true
 	Game.request_pause(Game.PAUSE_REASON_GAME_OVER)
 	await get_tree().create_timer(0.8).timeout
@@ -1456,7 +1492,7 @@ func _show_game_over_panel() -> void:
 	game_over_panel.add_child(vbox)
 
 	var title := Label.new()
-	title.text = "💔 猫咪倒下了..."
+	title.text = "💥 老家失守了..."
 	title.add_theme_font_size_override("font_size", 28)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(title)
