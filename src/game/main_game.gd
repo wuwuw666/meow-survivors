@@ -40,6 +40,9 @@ const TOWER_MOD_MANAGER_SCRIPT := preload("res://src/game/tower_mod_manager.gd")
 const HERO_CAT_TEXTURE: Texture2D = preload("res://assets/prototype_art/hero_cat.png")
 const PICKUP_COIN_TEXTURE: Texture2D = preload("res://assets/prototype_art/pickup_coin.png")
 const PICKUP_XP_TEXTURE: Texture2D = preload("res://assets/prototype_art/pickup_xp.png")
+const TOWER_FISH_TEXTURE: Texture2D = preload("res://assets/prototype_art/tower_fish.png")
+const TOWER_YARN_TEXTURE: Texture2D = preload("res://assets/prototype_art/tower_yarn.png")
+const TOWER_CATNIP_TEXTURE: Texture2D = preload("res://assets/prototype_art/tower_catnip.png")
 
 # Wave state
 var wave_manager: WaveManager = null
@@ -741,6 +744,8 @@ func _build_ui() -> void:
 		btn.text = _format_tower_button_text(tw)
 		btn.custom_minimum_size = Vector2(85, 75)
 		btn.add_theme_font_size_override("font_size", 14)
+		btn.icon = _get_tower_button_icon(String(tw.get("key", "")))
+		btn.expand_icon = true
 		var tower_key := String(tw.get("key", ""))
 		btn.pressed.connect(_on_build_tower_button_pressed.bind(tower_key))
 		btn.mouse_entered.connect(_on_shop_button_hovered.bind(tower_key))
@@ -1591,6 +1596,16 @@ func _format_tower_button_text(tw_data: Dictionary) -> String:
 		effective_cost = tower_manager.get_effective_cost(tw_data)
 	return "%s\n💰%d" % [String(tw_data.get("name", "塔")), effective_cost]
 
+func _get_tower_button_icon(tower_key: String) -> Texture2D:
+	match tower_key:
+		"fish":
+			return TOWER_FISH_TEXTURE
+		"yarn":
+			return TOWER_YARN_TEXTURE
+		"aura":
+			return TOWER_CATNIP_TEXTURE
+	return null
+
 func _refresh_tower_shop_buttons() -> void:
 	for entry in tower_shop_buttons:
 		var btn := entry.get("button") as Button
@@ -1598,6 +1613,7 @@ func _refresh_tower_shop_buttons() -> void:
 		if btn == null:
 			continue
 		btn.text = _format_tower_button_text(tw_data)
+		btn.icon = _get_tower_button_icon(String(tw_data.get("key", "")))
 		var effective_cost := int(tw_data.get("cost", 0))
 		if tower_manager:
 			effective_cost = tower_manager.get_effective_cost(tw_data)
