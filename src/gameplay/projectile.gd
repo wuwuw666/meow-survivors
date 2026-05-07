@@ -1,6 +1,9 @@
 class_name Projectile
 extends Area2D
 
+const PROJECTILE_FISH_TEXTURE: Texture2D = preload("res://assets/prototype_art/projectile_fish.png")
+const PROJECTILE_YARN_TEXTURE: Texture2D = preload("res://assets/prototype_art/projectile_yarn.png")
+
 var speed: float = 500.0
 var damage: int = 5
 var is_crit: bool = false
@@ -26,6 +29,7 @@ func setup(target: Node, dmg: int, crit: bool, spd: float, payload: Dictionary =
 	is_crit = crit
 	speed = spd
 	extra_data = payload.duplicate(true)
+	_apply_projectile_visual()
 	_aim_at_target()
 
 func _aim_at_target() -> void:
@@ -121,3 +125,47 @@ func _apply_on_hit_effects(hit_enemy_node: Node) -> void:
 		if enemy_node.has_method("apply_slow"):
 			enemy_node.apply_slow(slow_factor, slow_duration)
 			affected += 1
+
+func _apply_projectile_visual() -> void:
+	_clear_projectile_visual()
+	var tower_key := String(extra_data.get("tower_key", ""))
+	match tower_key:
+		"fish":
+			_make_fish_projectile()
+		"yarn":
+			_make_yarn_projectile()
+		_:
+			_make_default_projectile()
+
+func _clear_projectile_visual() -> void:
+	var old_visual := get_node_or_null("PrototypeVisual")
+	if old_visual:
+		old_visual.queue_free()
+	var old_sprite := get_node_or_null("Sprite") as CanvasItem
+	if old_sprite:
+		old_sprite.visible = false
+
+func _make_default_projectile() -> void:
+	var body := ColorRect.new()
+	body.name = "PrototypeVisual"
+	body.size = Vector2(12, 6)
+	body.pivot_offset = body.size * 0.5
+	body.position = -body.pivot_offset
+	body.color = Color(1.0, 0.86, 0.42)
+	add_child(body)
+
+func _make_fish_projectile() -> void:
+	_add_projectile_sprite(PROJECTILE_FISH_TEXTURE, 26.0)
+
+func _make_yarn_projectile() -> void:
+	_add_projectile_sprite(PROJECTILE_YARN_TEXTURE, 24.0)
+
+func _add_projectile_sprite(texture: Texture2D, target_width: float) -> void:
+	var sprite := Sprite2D.new()
+	sprite.name = "PrototypeVisual"
+	sprite.texture = texture
+	sprite.z_index = 4
+	var texture_size := texture.get_size()
+	var scale_factor: float = target_width / texture_size.x
+	sprite.scale = Vector2.ONE * scale_factor
+	add_child(sprite)

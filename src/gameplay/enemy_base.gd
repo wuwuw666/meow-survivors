@@ -15,6 +15,11 @@ signal enemy_reached_base(enemy: Node)
 const ENEMY_DATA_PATH: String = "res://assets/data/enemy_data.json"
 const ENEMY_LAYER: int = 2
 const PLAYER_LAYER: int = 1
+const ENEMY_FAST_TEXTURE: Texture2D = preload("res://assets/prototype_art/enemy_fast.png")
+const ENEMY_NORMAL_TEXTURE: Texture2D = preload("res://assets/prototype_art/enemy_normal.png")
+const ENEMY_HEAVY_TEXTURE: Texture2D = preload("res://assets/prototype_art/enemy_heavy.png")
+const ENEMY_ELITE_TEXTURE: Texture2D = preload("res://assets/prototype_art/enemy_elite.png")
+const ENEMY_BOSS_TEXTURE: Texture2D = preload("res://assets/prototype_art/enemy_boss.png")
 
 var ENEMY_DATA: Dictionary = {}
 
@@ -96,6 +101,9 @@ func _on_enemy_died() -> void:
 		collision_shape.set_deferred("disabled", true)
 	if _hp_bar:
 		_hp_bar.visible = false
+	var tween := create_tween()
+	tween.tween_property(self, "scale", scale * 0.85, death_anim_duration)
+	tween.parallel().tween_property(self, "modulate:a", 0.0, death_anim_duration)
 	await get_tree().create_timer(death_anim_duration).timeout
 	queue_free()
 
@@ -197,19 +205,29 @@ func _on_hp_changed(current: int, max_val: int) -> void:
 	_hp_bar.value = current
 	_hp_bar.max_value = max_val
 	_hp_bar.visible = true
+	if _state == "ACTIVE" and current < max_val:
+		_flash_on_hit()
 
 func _setup_visuals() -> void:
 	var sprite := get_node_or_null("Sprite") as ColorRect
-	if sprite == null:
+	var config := _get_enemy_visual_config(enemy_type)
+	if sprite:
+		sprite.visible = false
+
+	var texture := config.get("texture", null) as Texture2D
+	if texture:
+		_add_enemy_sprite(texture, float(config.get("target_height", 44.0)))
 		return
 
+	if sprite == null:
+		return
 	var body_size: float = float(_data.get("body_size", 14.0))
-	var diameter: float = body_size * 1.45
+	var diameter: float = body_size * float(config.get("diameter_scale", 1.55))
 	sprite.size = Vector2(diameter, diameter)
 	sprite.position = Vector2(-diameter * 0.5, -diameter * 0.5)
 	sprite.pivot_offset = sprite.size * 0.5
 	sprite.rotation = 0.0
-	sprite.color = _get_enemy_fill_color()
+	sprite.color = config.get("color", _get_enemy_fill_color())
 
 	if enemy_type == "elite":
 		sprite.rotation = deg_to_rad(45.0)
@@ -217,6 +235,59 @@ func _setup_visuals() -> void:
 		sprite.size *= 1.12
 		sprite.position = Vector2(-sprite.size.x * 0.5, -sprite.size.y * 0.5)
 		sprite.pivot_offset = sprite.size * 0.5
+
+	_add_enemy_accent(config, diameter)
+
+func _get_enemy_visual_config(type_id: String) -> Dictionary:
+	match type_id:
+		"normal_a":
+			return {"color": Color(1.0, 0.42, 0.36), "accent": Color(1.0, 0.76, 0.68), "diameter_scale": 1.42, "texture": ENEMY_FAST_TEXTURE, "target_height": 34.0}
+		"normal_b":
+			return {"color": Color(0.96, 0.49, 0.42), "accent": Color(1.0, 0.82, 0.72), "diameter_scale": 1.55, "texture": ENEMY_NORMAL_TEXTURE, "target_height": 44.0}
+		"normal_c":
+			return {"color": Color(0.48, 0.68, 0.92), "accent": Color(0.80, 0.90, 1.0), "diameter_scale": 1.65, "texture": ENEMY_HEAVY_TEXTURE, "target_height": 56.0}
+		"elite":
+			return {"color": Color(0.96, 0.72, 0.28), "accent": Color(1.0, 0.92, 0.58), "diameter_scale": 1.72, "texture": ENEMY_ELITE_TEXTURE, "target_height": 62.0}
+		"boss":
+			return {"color": Color(0.82, 0.31, 0.25), "accent": Color(1.0, 0.66, 0.45), "diameter_scale": 1.82, "texture": ENEMY_BOSS_TEXTURE, "target_height": 112.0}
+	return {"color": Color(0.96, 0.49, 0.42), "accent": Color(1.0, 0.82, 0.72), "diameter_scale": 1.55}
+
+func _add_enemy_sprite(texture: Texture2D, target_height: float) -> void:
+	var old_sprite := get_node_or_null("PrototypeSprite")
+	if old_sprite:
+		old_sprite.queue_free()
+	var sprite := Sprite2D.new()
+	sprite.name = "PrototypeSprite"
+	sprite.texture = texture
+	sprite.z_index = 2
+	var texture_size := texture.get_size()
+	var scale_factor: float = target_height / texture_size.y
+	sprite.scale = Vector2.ONE * scale_factor
+	add_child(sprite)
+
+func _add_enemy_accent(config: Dictionary, diameter: float) -> void:
+	var old_accent := get_node_or_null("PrototypeAccent")
+	if old_accent:
+		old_accent.queue_free()
+	var accent := ColorRect.new()
+	accent.name = "PrototypeAccent"
+	accent.size = Vector2(diameter * 0.34, diameter * 0.18)
+	accent.pivot_offset = accent.size * 0.5
+	accent.position = Vector2(-diameter * 0.24, -diameter * 0.26)
+	accent.color = config.get("accent", Color.WHITE)
+	add_child(accent)
+
+	if enemy_type == "elite" or enemy_type == "boss":
+		var rim := Line2D.new()
+		rim.name = "PrototypeRim"
+		rim.width = 3.0 if enemy_type == "elite" else 4.0
+		rim.default_color = config.get("accent", Color.WHITE)
+		rim.closed = true
+		var radius := diameter * 0.55
+		for index in range(32):
+			var angle := TAU * float(index) / 32.0
+			rim.add_point(Vector2(cos(angle), sin(angle)) * radius)
+		add_child(rim)
 
 func _setup_health_bar() -> void:
 	_hp_bar = ProgressBar.new()
@@ -258,11 +329,11 @@ func _get_enemy_fill_color() -> Color:
 		"normal_b":
 			return Color(0.95, 0.45, 0.3)
 		"normal_c":
-			return Color(0.75, 0.2, 0.2)
+			return Color(0.48, 0.68, 0.92)
 		"elite":
 			return Color(1.0, 0.72, 0.22)
 		"boss":
-			return Color(0.78, 0.28, 1.0)
+			return Color(0.82, 0.31, 0.25)
 		_:
 			return Color(0.9, 0.2, 0.2)
 
@@ -271,9 +342,16 @@ func _get_health_bar_fill_color() -> Color:
 		"elite":
 			return Color(1.0, 0.82, 0.3)
 		"boss":
-			return Color(0.9, 0.35, 1.0)
+			return Color(0.95, 0.42, 0.32)
 		_:
 			return Color(0.9, 0.2, 0.2)
+
+func _flash_on_hit() -> void:
+	if is_dead:
+		return
+	modulate = Color(1.4, 1.25, 1.15, modulate.a)
+	var tween := create_tween()
+	tween.tween_property(self, "modulate", Color(1, 1, 1, modulate.a), 0.12)
 
 func is_alive() -> bool:
 	return not is_dead

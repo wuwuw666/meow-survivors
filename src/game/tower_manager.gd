@@ -3,6 +3,10 @@ extends Node
 
 signal tower_placed(slot_id: int, tower_node: Node2D, tower_data: Dictionary)
 
+const TOWER_FISH_TEXTURE: Texture2D = preload("res://assets/prototype_art/tower_fish.png")
+const TOWER_YARN_TEXTURE: Texture2D = preload("res://assets/prototype_art/tower_yarn.png")
+const TOWER_CATNIP_TEXTURE: Texture2D = preload("res://assets/prototype_art/tower_catnip.png")
+
 var _host: Node2D = null
 var _projectile_scene: PackedScene = null
 var _tower_data = null
@@ -112,18 +116,7 @@ func place_tower_on_slot(slot_id: int, tower_key: String) -> Node2D:
 	tower_node.global_position = slot_pos
 	_host.add_child(tower_node)
 
-	var sprite := ColorRect.new()
-	sprite.size = Vector2(44, 44)
-	sprite.pivot_offset = Vector2(22, 22)
-	sprite.position = Vector2(-22, -22)
-	match String(tw_data.get("type", "")):
-		"attack":
-			sprite.color = Color(1, 0.45, 0.45)
-		"control":
-			sprite.color = Color(0.45, 0.75, 1.0)
-		"aura":
-			sprite.color = Color(0.45, 1.0, 0.55)
-	tower_node.add_child(sprite)
+	_build_tower_visual(tower_node, tw_data)
 
 	var ts := TargetSystem.new()
 	ts.name = "TargetSystem"
@@ -203,6 +196,64 @@ func _build_runtime_tower_data(tw_data: Dictionary, tower_entry: Dictionary) -> 
 	if runtime_data.has("buff") or tower_entry.has("buff"):
 		runtime_data["buff"] = float(tower_entry.get("buff", runtime_data.get("buff", 0.0)))
 	return runtime_data
+
+func _build_tower_visual(tower_node: Node2D, tw_data: Dictionary) -> void:
+	var tower_key := String(tw_data.get("key", ""))
+	match tower_key:
+		"fish":
+			_build_fish_tower_visual(tower_node)
+		"yarn":
+			_build_yarn_tower_visual(tower_node)
+		"aura":
+			_build_catnip_tower_visual(tower_node)
+		_:
+			_build_default_tower_visual(tower_node)
+
+func _build_default_tower_visual(tower_node: Node2D) -> void:
+	var body := ColorRect.new()
+	body.name = "PrototypeBody"
+	body.size = Vector2(42, 42)
+	body.pivot_offset = body.size * 0.5
+	body.position = -body.pivot_offset
+	body.color = Color(1.0, 0.84, 0.42)
+	tower_node.add_child(body)
+
+	var roof := ColorRect.new()
+	roof.name = "PrototypeAccent"
+	roof.size = Vector2(30, 10)
+	roof.pivot_offset = roof.size * 0.5
+	roof.position = Vector2(-15, -25)
+	roof.color = Color(0.82, 0.38, 0.25)
+	tower_node.add_child(roof)
+
+func _build_fish_tower_visual(tower_node: Node2D) -> void:
+	_add_tower_sprite(tower_node, TOWER_FISH_TEXTURE, 66.0)
+
+func _build_yarn_tower_visual(tower_node: Node2D) -> void:
+	_add_tower_sprite(tower_node, TOWER_YARN_TEXTURE, 62.0)
+
+func _build_catnip_tower_visual(tower_node: Node2D) -> void:
+	_add_tower_sprite(tower_node, TOWER_CATNIP_TEXTURE, 66.0)
+
+	var ring := Line2D.new()
+	ring.name = "PrototypeAccent"
+	ring.width = 2.0
+	ring.default_color = Color(0.65, 1.0, 0.68, 0.65)
+	ring.closed = true
+	for index in range(36):
+		var angle := TAU * float(index) / 36.0
+		ring.add_point(Vector2(cos(angle), sin(angle)) * 34.0)
+	tower_node.add_child(ring)
+
+func _add_tower_sprite(tower_node: Node2D, texture: Texture2D, target_height: float) -> void:
+	var sprite := Sprite2D.new()
+	sprite.name = "PrototypeBody"
+	sprite.texture = texture
+	sprite.z_index = 2
+	var texture_size := texture.get_size()
+	var scale_factor: float = target_height / texture_size.y
+	sprite.scale = Vector2.ONE * scale_factor
+	tower_node.add_child(sprite)
 
 func _refresh_attack_towers() -> void:
 	for tw_dict in Game.placed_towers:
@@ -332,15 +383,15 @@ func _apply_pending_specialization(tower_node: Node2D, auto_attack: AutoAttackSy
 
 func _apply_specialization(tower_node: Node2D, specialization_id: String) -> void:
 	tower_node.set_meta("specialization", specialization_id)
-	var sprite: ColorRect = tower_node.get_child(0) as ColorRect
-	if sprite:
+	var body := tower_node.get_node_or_null("PrototypeBody") as CanvasItem
+	if body:
 		match specialization_id:
 			"fish_core":
-				sprite.color = Color(1.0, 0.72, 0.35)
-				sprite.scale = Vector2(1.08, 1.08)
+				body.modulate = Color(1.0, 0.88, 0.68)
+				body.scale = Vector2(1.08, 1.08)
 			"yarn_anchor":
-				sprite.color = Color(0.45, 0.95, 1.0)
-				sprite.scale = Vector2(1.08, 1.08)
+				body.modulate = Color(0.72, 0.95, 1.0)
+				body.scale = Vector2(1.08, 1.08)
 
 	var auto_attack: AutoAttackSystem = tower_node.get_node_or_null("AutoAttack") as AutoAttackSystem
 	if auto_attack:

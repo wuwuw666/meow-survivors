@@ -22,6 +22,7 @@ const UpgradeDataScript = preload("res://src/data/upgrade_data.gd")
 @onready var hero_health: HealthComponent = null
 @onready var base_health: BaseHealthComponent = null
 @onready var feedback: CombatFeedbackManager = null
+@onready var art_feedback: ArtFeedbackManager = null
 @onready var spawn_manager: SpawnManager = null
 @onready var tower_manager: TowerManager = null
 var upgrade_data = null
@@ -30,11 +31,15 @@ var upgrade_data = null
 # 弹丸场景（预加载）
 const PROJECTILE_SCENE: PackedScene = preload("res://scenes/gameplay/projectile.tscn")
 const COMBAT_FEEDBACK_MANAGER_SCRIPT := preload("res://src/game/combat_feedback_manager.gd")
+const ART_FEEDBACK_MANAGER_SCRIPT := preload("res://src/game/art_feedback_manager.gd")
 const BASE_HEALTH_COMPONENT_SCRIPT := preload("res://src/core/base_health_component.gd")
 const SPAWN_MANAGER_SCRIPT := preload("res://src/game/spawn_manager.gd")
 const TOWER_MANAGER_SCRIPT := preload("res://src/game/tower_manager.gd")
 const TOWER_DATA_SCRIPT := preload("res://src/data/tower_data.gd")
 const TOWER_MOD_MANAGER_SCRIPT := preload("res://src/game/tower_mod_manager.gd")
+const HERO_CAT_TEXTURE: Texture2D = preload("res://assets/prototype_art/hero_cat.png")
+const PICKUP_COIN_TEXTURE: Texture2D = preload("res://assets/prototype_art/pickup_coin.png")
+const PICKUP_XP_TEXTURE: Texture2D = preload("res://assets/prototype_art/pickup_xp.png")
 
 # Wave state
 var wave_manager: WaveManager = null
@@ -97,6 +102,7 @@ func _ready() -> void:
 
 	Game.reset_session()
 	_setup_components()
+	_setup_hero_visual()
 	upgrade_data = UpgradeDataScript.new()
 	_setup_tower_data()
 	_load_paths_from_nodes()
@@ -176,6 +182,22 @@ func _setup_tower_data() -> void:
 	if tower_manager:
 		tower_manager.bind_tower_data(_tower_data)
 
+func _setup_hero_visual() -> void:
+	if player == null:
+		return
+	var existing := player.get_node_or_null("PrototypeHeroSprite")
+	if existing:
+		existing.queue_free()
+	var sprite := Sprite2D.new()
+	sprite.name = "PrototypeHeroSprite"
+	sprite.texture = HERO_CAT_TEXTURE
+	sprite.z_index = 3
+	var max_size := 44.0
+	var texture_size := HERO_CAT_TEXTURE.get_size()
+	var scale_factor: float = minf(max_size / texture_size.x, max_size / texture_size.y)
+	sprite.scale = Vector2.ONE * scale_factor
+	player.add_child(sprite)
+
 func _load_tower_slots() -> void:
 	if tower_manager:
 		tower_manager.load_slots_from_node(get_node_or_null("TowerSlots"))
@@ -234,6 +256,11 @@ func _setup_components() -> void:
 	feedback.name = "CombatFeedbackManager"
 	add_child(feedback)
 	feedback.bind_refs(player, damage_container, effect_container, $Camera2D)
+
+	art_feedback = ART_FEEDBACK_MANAGER_SCRIPT.new()
+	art_feedback.name = "ArtFeedbackManager"
+	add_child(art_feedback)
+	art_feedback.bind_effect_container(effect_container)
 
 	base_health = BASE_HEALTH_COMPONENT_SCRIPT.new()
 	base_health.name = "BaseHealthComponent"
@@ -394,6 +421,11 @@ func _on_spawn_requested(enemy_type: String) -> void:
 		var spawned_enemy = spawn_manager.spawn_enemy(enemy_type)
 		if enemy_type == "elite" and is_instance_valid(spawned_enemy):
 			_show_floating_text(spawned_enemy.global_position + Vector2(0, -26), "精英来袭！", Color(1.0, 0.7, 0.3))
+			if art_feedback:
+				art_feedback.show_enemy_pop(spawned_enemy.global_position, Color(0.96, 0.79, 0.36), 1.35)
+		elif enemy_type == "boss" and is_instance_valid(spawned_enemy):
+			if art_feedback:
+				art_feedback.show_boss_warning(spawned_enemy.global_position)
 
 func _on_enemy_reached_base(enemy: Node) -> void:
 	if not is_instance_valid(enemy):
@@ -442,10 +474,14 @@ func _process_pickups(delta: float) -> void:
 					var val: int = pickup.get_meta("xp_value", 3)
 					_grant_xp(val)
 					_show_floating_text(pickup.global_position, "+%d XP" % val, Color(0.7, 0.5, 1.0))
+					if art_feedback:
+						art_feedback.show_pickup_sparkle(pickup.global_position, Color(0.39, 0.78, 1.0))
 				"coin":
 					var val: int = pickup.get_meta("coin_value", 2)
 					Game.add_coins(val)
 					_show_floating_text(pickup.global_position, "+%d 💰" % val, Color(1, 0.85, 0.2))
+					if art_feedback:
+						art_feedback.show_pickup_sparkle(pickup.global_position, Color(1.0, 0.82, 0.35))
 			to_remove.append(pickup)
 
 	for p in to_remove:
@@ -460,14 +496,10 @@ func spawn_xp_orb(pos: Vector2, value: int) -> void:
 	orb.name = "XPOrb"
 	orb.position = pos + Vector2(randf_range(-10, 10), randf_range(-10, 10))
 
-	# 视觉：紫色小圆球
-	var sprite := ColorRect.new()
+	var sprite := Sprite2D.new()
 	sprite.name = "Sprite"
-	sprite.offset_left = -5.0
-	sprite.offset_top = -5.0
-	sprite.offset_right = 5.0
-	sprite.offset_bottom = 5.0
-	sprite.color = Color(0.6, 0.3, 1.0, 1)
+	sprite.texture = PICKUP_XP_TEXTURE
+	sprite.scale = Vector2.ONE * 0.16
 	orb.add_child(sprite)
 
 	# 标签
@@ -509,14 +541,10 @@ func spawn_coin(pos: Vector2, value: int) -> void:
 	coin.name = "Coin"
 	coin.position = pos + Vector2(randf_range(-8, 8), randf_range(-8, 8))
 
-	# 视觉：金色小圆
-	var sprite := ColorRect.new()
+	var sprite := Sprite2D.new()
 	sprite.name = "Sprite"
-	sprite.offset_left = -6.0
-	sprite.offset_top = -6.0
-	sprite.offset_right = 6.0
-	sprite.offset_bottom = 6.0
-	sprite.color = Color(1, 0.82, 0.1, 1)
+	sprite.texture = PICKUP_COIN_TEXTURE
+	sprite.scale = Vector2.ONE * 0.16
 	coin.add_child(sprite)
 
 	# 标签
@@ -561,6 +589,19 @@ func _on_enemy_died_wrapper(enemy: Node) -> void:
 	# 原地视觉提示取代掉落
 	_show_floating_text(enemy.global_position, "+%d 💰" % coin_val, Color(1, 0.85, 0.2))
 	_show_floating_text(enemy.global_position + Vector2(0, -15), "+%d XP" % xp_val, Color(0.7, 0.5, 1.0))
+	if art_feedback:
+		var enemy_color := Color(0.96, 0.49, 0.42)
+		var pop_scale := 1.0
+		match enemy_type:
+			"boss":
+				enemy_color = Color(0.85, 0.37, 0.30)
+				pop_scale = 2.0
+			"elite":
+				enemy_color = Color(0.96, 0.79, 0.36)
+				pop_scale = 1.35
+			"normal_c":
+				enemy_color = Color(0.48, 0.68, 0.92)
+		art_feedback.show_enemy_pop(enemy.global_position, enemy_color, pop_scale)
 
 	# 死亡爆炸粒子
 	_spawn_death_particles(enemy.global_position, enemy_data.get("body_size", 14.0))
@@ -991,6 +1032,8 @@ func _select_tower_slot(slot_id: int) -> void:
 
 func _on_tower_placed(slot_id: int, tower_node: Node2D, tw_data: Dictionary) -> void:
 	_spawn_place_effect(tower_node.global_position, Color.WHITE)
+	if art_feedback:
+		art_feedback.show_place_flash(tower_node.global_position)
 	add_screen_shake(2.0)
 	_update_hud()
 	_selected_slot_id = -1
