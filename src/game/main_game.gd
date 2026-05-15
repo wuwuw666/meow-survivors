@@ -76,6 +76,8 @@ var upgrade_panel: PanelContainer
 var tower_info_panel: PanelContainer
 var tower_mod_offer_panel: PanelContainer
 var game_over_panel: PanelContainer
+var equipment_queue_button: Button
+var equipment_queue_label: Label
 
 # 屏幕震动
 var _shake_intensity: float = 0.0
@@ -754,6 +756,29 @@ func _build_ui() -> void:
 		tower_shop_buttons.append({"button": btn, "data": tw})
 		_tower_shop_buttons[tower_key] = btn
 
+	var equipment_box := VBoxContainer.new()
+	equipment_box.name = "EquipmentQueueBox"
+	equipment_box.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	equipment_box.offset_left = -210
+	equipment_box.offset_top = 84
+	equipment_box.offset_right = -20
+	equipment_box.offset_bottom = 170
+	equipment_box.mouse_filter = Control.MOUSE_FILTER_STOP
+	ui.add_child(equipment_box)
+
+	equipment_queue_label = Label.new()
+	equipment_queue_label.text = "塔装备补给 x0"
+	equipment_queue_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	equipment_queue_label.add_theme_font_size_override("font_size", 16)
+	equipment_box.add_child(equipment_queue_label)
+
+	equipment_queue_button = Button.new()
+	equipment_queue_button.text = "打开补给"
+	equipment_queue_button.disabled = true
+	equipment_queue_button.custom_minimum_size = Vector2(180, 42)
+	equipment_queue_button.pressed.connect(_on_equipment_queue_button_pressed)
+	equipment_box.add_child(equipment_queue_button)
+
 # ========== HUD update ==========
 func _update_hud() -> void:
 	if hp_bar == null:
@@ -783,8 +808,19 @@ func _update_hud() -> void:
 
 	coin_label.text = "💰 %d" % Game.player_coins
 	_refresh_tower_shop_buttons()
+	_refresh_equipment_queue_ui()
 
 	# (已移除塔插槽更新)
+
+func _refresh_equipment_queue_ui() -> void:
+	if equipment_queue_label == null or equipment_queue_button == null:
+		return
+	var count := 0
+	if tower_mod_manager:
+		count = tower_mod_manager.get_queued_supply_count()
+	var offer_panel_open := tower_mod_offer_panel != null and tower_mod_offer_panel.visible
+	equipment_queue_label.text = "塔装备补给 x%d" % count
+	equipment_queue_button.disabled = count <= 0 or _is_waiting_for_mod_target() or offer_panel_open
 
 # ========== Damage numbers & floating text ==========
 func _show_damage_number(world_pos: Vector2, value: int, is_crit: bool) -> void:
@@ -1181,39 +1217,39 @@ func _on_shop_button_unhovered(tower_key: String) -> void:
 	if _preview_tower_key == tower_key:
 		_preview_tower_key = ""
 
-func _open_debug_tower_mod_offer() -> void:
-	var offers: Array[Dictionary] = tower_mod_manager.get_debug_offers(tower_manager.get_all_slots())
-	if offers.is_empty():
-		_show_floating_text(player.global_position + Vector2(0, -72), "当前没有可用的塔改造目标", Color(1.0, 0.8, 0.35))
+func _on_equipment_queue_button_pressed() -> void:
+	if tower_mod_manager == null or tower_manager == null:
 		return
-
+	if Game.is_game_over:
+		return
+	var offers := tower_mod_manager.open_next_supply(tower_manager.get_all_slots())
+	if offers.is_empty():
+		_show_floating_text(player.global_position + Vector2(0, -72), "当前没有可装配的塔装备", Color(1.0, 0.8, 0.35))
+		_refresh_equipment_queue_ui()
+		return
 	_show_tower_mod_offer_panel(offers)
-	Game.request_pause("tower_mod_offer")
+	_refresh_equipment_queue_ui()
+
+func _open_debug_tower_mod_offer() -> void:
+	if tower_mod_manager == null:
+		return
+	tower_mod_manager.queue_equipment_supply()
+	_on_equipment_queue_button_pressed()
 
 func _queue_elite_tower_mod_offer(world_pos: Vector2) -> void:
-	_pending_elite_mod_offers += 1
-	_show_floating_text(world_pos + Vector2(0, -32), "精英掉落了塔改造机会", Color(1.0, 0.8, 0.35))
-	_try_open_pending_tower_mod_offer()
+	if tower_mod_manager == null:
+		return
+	var queued := tower_mod_manager.queue_equipment_supply()
+	if queued:
+		_show_floating_text(world_pos + Vector2(0, -32), "获得塔装备补给", Color(1.0, 0.8, 0.35))
+	else:
+		_show_floating_text(world_pos + Vector2(0, -32), "补给队列已满", Color(1.0, 0.55, 0.35))
+	if wave_manager:
+		wave_manager.start_pressure_valley(4.0)
+	_refresh_equipment_queue_ui()
 
 func _try_open_pending_tower_mod_offer() -> void:
-	if _pending_elite_mod_offers <= 0:
-		return
-	if Game.is_game_over or Game.is_paused:
-		return
-	if _is_waiting_for_mod_target():
-		return
-	if tower_mod_offer_panel and tower_mod_offer_panel.visible:
-		return
-	if upgrade_panel and upgrade_panel.visible:
-		return
-
-	var offers: Array[Dictionary] = tower_mod_manager.get_debug_offers(tower_manager.get_all_slots())
-	if offers.is_empty():
-		return
-
-	_pending_elite_mod_offers -= 1
-	_show_tower_mod_offer_panel(offers)
-	Game.request_pause("tower_mod_offer")
+	_refresh_equipment_queue_ui()
 
 func _show_tower_mod_offer_panel(offers: Array[Dictionary]) -> void:
 	tower_mod_manager.start_offer(offers)
@@ -1223,7 +1259,7 @@ func _show_tower_mod_offer_panel(offers: Array[Dictionary]) -> void:
 		tower_mod_offer_panel = PanelContainer.new()
 		tower_mod_offer_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 		tower_mod_offer_panel.custom_minimum_size = Vector2(760, 320)
-		tower_mod_offer_panel.process_mode = Node.PROCESS_MODE_WHEN_PAUSED
+		tower_mod_offer_panel.process_mode = Node.PROCESS_MODE_INHERIT
 		tower_mod_offer_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 		tower_mod_offer_panel.visible = false
 		tower_mod_offer_panel.z_index = 120
@@ -1232,19 +1268,20 @@ func _show_tower_mod_offer_panel(offers: Array[Dictionary]) -> void:
 	tower_mod_offer_panel.visible = true
 	for child in tower_mod_offer_panel.get_children():
 		child.queue_free()
+	_refresh_equipment_queue_ui()
 
 	var root := VBoxContainer.new()
 	root.add_theme_constant_override("separation", 14)
 	tower_mod_offer_panel.add_child(root)
 
 	var title := Label.new()
-	title.text = "调试塔改造"
+	title.text = "塔装备补给"
 	title.add_theme_font_size_override("font_size", 26)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(title)
 
 	var subtitle := Label.new()
-	subtitle.text = "按 M 打开。先选择一个改造，再点击兼容的塔位装备。"
+	subtitle.text = "战斗不会暂停。选一个装备，再点击高亮塔位装配。"
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.add_theme_color_override("font_color", Color(0.78, 0.78, 0.84))
 	root.add_child(subtitle)
@@ -1276,12 +1313,12 @@ func _on_tower_mod_offer_selected(mod_id: String) -> void:
 
 	if tower_mod_offer_panel:
 		tower_mod_offer_panel.visible = false
-	Game.release_pause("tower_mod_offer")
 	_selected_slot_id = -1
 	_hide_tower_info_panel()
 	_preview_tower_key = ""
 	_refresh_slot_markers()
 	_show_floating_text(player.global_position + Vector2(0, -72), "选择一座高亮塔位来装备改造", Color(1.0, 0.8, 0.35))
+	_refresh_equipment_queue_ui()
 
 func _is_waiting_for_mod_target() -> bool:
 	return tower_mod_manager and tower_mod_manager.has_pending_mod() and not _mod_target_slot_ids.is_empty()
@@ -1301,6 +1338,7 @@ func _try_apply_pending_mod(slot_id: int) -> void:
 	_mod_target_slot_ids.clear()
 	_refresh_slot_markers()
 	_show_tower_info_panel(slot_id)
+	_refresh_equipment_queue_ui()
 
 func _on_tower_mod_applied(slot_id: int, mod_data: Dictionary) -> void:
 	var slot_info: Dictionary = tower_manager.get_slot_data(slot_id)
@@ -1317,9 +1355,8 @@ func _close_tower_mod_offer_flow() -> void:
 	_selected_slot_id = -1
 	_preview_tower_key = ""
 	_hide_tower_info_panel()
-	if Game.is_paused:
-		Game.release_pause("tower_mod_offer")
 	_refresh_slot_markers()
+	_refresh_equipment_queue_ui()
 
 func _sync_ui_root_rect() -> void:
 	if ui == null:
@@ -1332,6 +1369,10 @@ func _try_handle_ui_click_fallback(screen_pos: Vector2) -> bool:
 	if start_button and start_button.visible and start_button.get_global_rect().has_point(screen_pos):
 		_start_game_from_ready()
 		start_button.queue_free()
+		return true
+
+	if equipment_queue_button and equipment_queue_button.visible and not equipment_queue_button.disabled and equipment_queue_button.get_global_rect().has_point(screen_pos):
+		_on_equipment_queue_button_pressed()
 		return true
 
 	for tower_key_variant in _tower_shop_buttons.keys():

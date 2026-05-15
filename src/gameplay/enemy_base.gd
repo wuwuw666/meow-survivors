@@ -120,7 +120,7 @@ func _load_enemy_table() -> void:
 	if file == null:
 		push_warning("EnemyBase: enemy_data.json not found, using defaults")
 		ENEMY_DATA = {
-			"normal_a": {"role": "runner", "hp": 42, "speed": 94.0, "damage": 10, "body_size": 13.0, "coin": 2, "xp": 3},
+			"normal_a": {"role": "runner", "hp": 42, "speed": 84.0, "damage": 10, "body_size": 13.0, "coin": 2, "xp": 3},
 			"normal_b": {"role": "basic", "hp": 88, "speed": 68.0, "damage": 14, "body_size": 18.0, "coin": 2, "xp": 3},
 			"normal_c": {"role": "tank", "hp": 180, "speed": 46.0, "damage": 20, "body_size": 23.0, "coin": 3, "xp": 5},
 			"elite": {"role": "bruiser", "hp": 360, "speed": 58.0, "damage": 24, "body_size": 25.0, "coin": 8, "xp": 10},

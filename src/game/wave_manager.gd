@@ -20,6 +20,12 @@ var _elite_spawn_target: int = 0
 var _elite_spawn_count: int = 0
 var _enabled: bool = false
 var _main_game: Node = null
+var _wave_pulses: Array[Dictionary] = []
+var _current_pulse_index: int = 0
+var _pulse_spawned: int = 0
+var _pulse_gap_timer: float = 0.0
+var _pressure_valley_timer: float = 0.0
+var _spawning_complete: bool = false
 
 func _ready() -> void:
 	add_to_group("wave_system")
@@ -48,13 +54,30 @@ func _process(delta: float) -> void:
 	if not is_wave_active:
 		return
 
-	_spawn_timer -= delta
-	if _spawn_timer <= 0.0 and _spawn_count < _total_to_spawn:
-		_spawn_timer = _spawn_interval
-		_request_spawn()
-		_spawn_count += 1
+	if _pressure_valley_timer > 0.0:
+		_pressure_valley_timer -= delta
+		return
 
-	if _spawn_count < _total_to_spawn:
+	if _pulse_gap_timer > 0.0:
+		_pulse_gap_timer -= delta
+		return
+
+	if not _spawning_complete:
+		_spawn_timer -= delta
+		if _spawn_timer <= 0.0:
+			_request_spawn()
+			_spawn_count += 1
+			_pulse_spawned += 1
+
+			var pulse := _get_current_pulse()
+			_spawn_timer = float(pulse.get("interval", 1.2))
+			if _pulse_spawned >= int(pulse.get("count", 0)):
+				_current_pulse_index += 1
+				_pulse_spawned = 0
+				_pulse_gap_timer = float(pulse.get("gap_after", 0.0))
+				_spawning_complete = _current_pulse_index >= _wave_pulses.size()
+
+	if not _spawning_complete:
 		return
 
 	var alive: int = 0
@@ -72,65 +95,91 @@ func _start_wave(wave_num: int) -> void:
 	Game.current_wave = wave_num
 	is_wave_active = true
 
-	if wave_num == 10 and not _boss_spawned:
-		_boss_spawned = true
-		_total_to_spawn = 3
-		_spawn_interval = 3.5
-		_elite_spawn_target = 0
-	elif wave_num <= 2:
-		_total_to_spawn = 12 + wave_num * 4
-		_spawn_interval = 1.80
-		_elite_spawn_target = 0
-	elif wave_num <= 5:
-		_total_to_spawn = 18 + wave_num * 4
-		_spawn_interval = 1.48
-		_elite_spawn_target = 0
-	elif wave_num <= 6:
-		_total_to_spawn = 28 + wave_num * 4
-		_spawn_interval = 1.22
-		_elite_spawn_target = 1
-	elif wave_num <= 9:
-		_total_to_spawn = 35 + wave_num * 3
-		_spawn_interval = 1.02
-		_elite_spawn_target = 1
-	else:
-		_total_to_spawn = 50 + wave_num * 2
-		_spawn_interval = maxf(0.55, 0.95 - wave_num * 0.02)
-		_elite_spawn_target = 1
-
+	_wave_pulses = _build_wave_pulses(wave_num)
+	_current_pulse_index = 0
+	_pulse_spawned = 0
+	_pressure_valley_timer = 0.0
+	_spawning_complete = _wave_pulses.is_empty()
+	_total_to_spawn = 0
+	for pulse in _wave_pulses:
+		_total_to_spawn += int(pulse.get("count", 0))
 	_spawn_count = 0
 	_elite_spawn_count = 0
 	_spawn_timer = 0.5
+	_pulse_gap_timer = 0.0
 	wave_started.emit(wave_num)
 
+func start_pressure_valley(duration_sec: float = 4.0) -> void:
+	_pressure_valley_timer = maxf(_pressure_valley_timer, duration_sec)
+
+func _build_wave_pulses(wave_num: int) -> Array[Dictionary]:
+	if wave_num == 10:
+		return [
+			{"count": 1, "interval": 0.1, "gap_after": 2.5, "elite_at": -1, "boss_first": true, "weights": [0.0, 0.0, 0.0]},
+			{"count": 8, "interval": 1.05, "gap_after": 1.6, "elite_at": -1, "weights": [0.18, 0.52, 0.30]},
+			{"count": 10, "interval": 0.88, "gap_after": 0.0, "elite_at": -1, "weights": [0.22, 0.38, 0.40]},
+		]
+	if wave_num <= 2:
+		return [
+			{"count": 6 + wave_num, "interval": 1.85, "gap_after": 3.0, "elite_at": -1, "weights": [0.08, 0.82, 0.10]},
+			{"count": 6 + wave_num, "interval": 1.75, "gap_after": 0.0, "elite_at": -1, "weights": [0.14, 0.76, 0.10]},
+		]
+	if wave_num <= 5:
+		var elite_at := 4 if wave_num >= 4 else -1
+		return [
+			{"count": 8 + wave_num, "interval": 1.45, "gap_after": 2.5, "elite_at": -1, "weights": [0.18, 0.66, 0.16]},
+			{"count": 8 + wave_num, "interval": 1.32, "gap_after": 2.0, "elite_at": elite_at, "weights": [0.24, 0.56, 0.20]},
+			{"count": 5 + wave_num, "interval": 1.12, "gap_after": 0.0, "elite_at": -1, "weights": [0.28, 0.52, 0.20]},
+		]
+	if wave_num <= 8:
+		return [
+			{"count": 10 + wave_num, "interval": 1.18, "gap_after": 2.0, "elite_at": -1, "weights": [0.22, 0.46, 0.32]},
+			{"count": 10 + wave_num, "interval": 1.02, "gap_after": 1.8, "elite_at": 5, "weights": [0.24, 0.40, 0.36]},
+			{"count": 8 + wave_num, "interval": 0.92, "gap_after": 0.0, "elite_at": -1, "weights": [0.26, 0.36, 0.38]},
+		]
+	return [
+		{"count": 14, "interval": 0.96, "gap_after": 1.6, "elite_at": -1, "weights": [0.24, 0.40, 0.36]},
+		{"count": 14, "interval": 0.86, "gap_after": 1.3, "elite_at": 5, "weights": [0.28, 0.34, 0.38]},
+		{"count": 14, "interval": 0.78, "gap_after": 0.0, "elite_at": -1, "weights": [0.30, 0.30, 0.40]},
+	]
+
+func _get_current_pulse() -> Dictionary:
+	if _current_pulse_index < 0 or _current_pulse_index >= _wave_pulses.size():
+		return {}
+	return _wave_pulses[_current_pulse_index]
+
 func _request_spawn() -> void:
-	if current_wave == 10 and _boss_spawned and _spawn_count == 0:
+	var pulse := _get_current_pulse()
+	if pulse.is_empty():
+		return
+
+	if bool(pulse.get("boss_first", false)) and _pulse_spawned == 0:
 		spawn_requested.emit("boss")
 		return
 
-	if _elite_spawn_count < _elite_spawn_target:
-		var elite_trigger_index: int = maxi(2, int(floor(float(_total_to_spawn) * 0.4)))
-		if _spawn_count == elite_trigger_index:
-			_elite_spawn_count += 1
-			spawn_requested.emit("elite")
-			return
+	if int(pulse.get("elite_at", -1)) == _pulse_spawned:
+		_elite_spawn_count += 1
+		spawn_requested.emit("elite")
+		return
 
 	var types: Array[String] = ["normal_a", "normal_b", "normal_c"]
-	var weights: Array[float] = [0.18, 0.72, 0.10]
-	if current_wave >= 7:
-		weights = [0.24, 0.38, 0.38]
-	elif current_wave >= 3:
-		weights = [0.24, 0.60, 0.16]
-	elif current_wave >= 2:
-		weights = [0.20, 0.70, 0.10]
+	var weights_variant: Variant = pulse.get("weights", [0.18, 0.72, 0.10])
+	var weights: Array[float] = []
+	for value in weights_variant:
+		weights.append(float(value))
+	if weights.size() != 3:
+		weights = [0.18, 0.72, 0.10]
 
 	var total_weight: float = 0.0
 	for weight in weights:
 		total_weight += weight
+	if total_weight <= 0.0:
+		spawn_requested.emit("normal_b")
+		return
 
 	var roll: float = randf() * total_weight
 	var cumulative: float = 0.0
-	var chosen: String = "normal_a"
+	var chosen: String = "normal_b"
 	for index in range(types.size()):
 		cumulative += weights[index]
 		if roll < cumulative:

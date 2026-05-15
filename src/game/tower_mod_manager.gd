@@ -7,6 +7,10 @@ extends Node
 signal mod_offer_started(offers: Array[Dictionary])
 signal mod_selected(mod_data: Dictionary)
 signal mod_applied(slot_id: int, mod_data: Dictionary)
+signal equipment_supply_queued(queue_size: int)
+signal equipment_supply_opened(offers: Array[Dictionary])
+
+const MAX_QUEUED_SUPPLIES: int = 2
 
 const _MOD_DEFINITIONS: Array[Dictionary] = [
 	{
@@ -41,6 +45,32 @@ const _MOD_DEFINITIONS: Array[Dictionary] = [
 
 var _current_offers: Array[Dictionary] = []
 var _pending_mod: Dictionary = {}
+var _queued_supply_count: int = 0
+
+func queue_equipment_supply() -> bool:
+	if _queued_supply_count >= MAX_QUEUED_SUPPLIES:
+		return false
+	_queued_supply_count += 1
+	equipment_supply_queued.emit(_queued_supply_count)
+	return true
+
+func get_queued_supply_count() -> int:
+	return _queued_supply_count
+
+func can_open_supply() -> bool:
+	return _queued_supply_count > 0 and _current_offers.is_empty() and _pending_mod.is_empty()
+
+func open_next_supply(slots: Array[Dictionary], max_count: int = 3) -> Array[Dictionary]:
+	if not can_open_supply():
+		return []
+	var offers := get_debug_offers(slots, max_count)
+	if offers.is_empty():
+		return []
+	_queued_supply_count -= 1
+	start_offer(offers)
+	equipment_supply_opened.emit(offers)
+	equipment_supply_queued.emit(_queued_supply_count)
+	return offers
 
 func get_debug_offers(slots: Array[Dictionary], max_count: int = 3) -> Array[Dictionary]:
 	var offers: Array[Dictionary] = []
